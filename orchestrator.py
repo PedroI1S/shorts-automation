@@ -28,8 +28,9 @@ from usage_store import DB_PATH, UsageStore, AlreadyUsed
 LOCK_PATH = STORAGE_DIR / 'orchestrator.lock'
 MAX_ATTEMPTS = 3
 STAGES = ('queued', 'drafting', 'drafted', 'rendering', 'rendered',
-          'approved', 'rejected', 'failed', 'needs_attention')
-_FIELDS = {'attempts', 'story_path', 'render_job', 'output', 'error', 'review_note'}
+          'approved', 'rejected', 'scheduled', 'failed', 'needs_attention')
+_FIELDS = {'attempts', 'story_path', 'render_job', 'output', 'error', 'review_note',
+           'youtube_id', 'scheduled_at', 'youtube_url'}
 
 
 class RunnerBusy(RuntimeError):
@@ -59,6 +60,7 @@ class JobQueue:
                     gameplay_query TEXT, background_file TEXT, stage TEXT NOT NULL,
                     attempts INTEGER NOT NULL DEFAULT 0, story_path TEXT, render_job TEXT,
                     output TEXT, error TEXT, review_note TEXT,
+                    youtube_id TEXT, scheduled_at TEXT, youtube_url TEXT,
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS queue_jobs_stage ON queue_jobs(stage, created_at);
                 CREATE TABLE IF NOT EXISTS queue_events (
@@ -66,6 +68,11 @@ class JobQueue:
                     stage TEXT NOT NULL, detail TEXT);
                 CREATE INDEX IF NOT EXISTS queue_events_job ON queue_events(job_id);
             ''')
+            for col in ('youtube_id', 'scheduled_at', 'youtube_url'):
+                try:
+                    db.execute(f'ALTER TABLE queue_jobs ADD COLUMN {col} TEXT')
+                except sqlite3.OperationalError:
+                    pass
 
     @contextmanager
     def connect(self):
@@ -181,6 +188,52 @@ class JobQueue:
                 stage, story_path = 'drafted', job['story_path']
         return self.move(job['id'], (job['stage'],), stage, 'manual retry',
                          attempts=0, error=None, story_path=story_path)
+
+    def schedule_job(self, ref, youtube_service=None, dry_run=False, publish_at=None):
+        job = self.get(ref)
+        if job['youtube_id']:
+            raise ValueError(f"Job {job['id'][:8]} is already uploaded to YouTube (ID: {job['youtube_id']}).")
+        if job['stage'] not in ('approved', 'rendered'):
+            raise ValueError(f"Job {job['id'][:8]} must be in stage 'approved' or 'rendered' to schedule (current: {job['stage']}).")
+        if not job['output'] or not Path(job['output']).is_file():
+            raise ValueError(f"Job output video file does not exist: {job['output']}")
+
+        from youtube_uploader import build_short_metadata, get_next_publishing_slot, upload_video
+        video_path = Path(job['output'])
+        meta = build_short_metadata(video_path)
+
+        existing_booked = [r['scheduled_at'] for r in self.list() if r['scheduled_at']]
+        if publish_at:
+            utc_iso = publish_at
+            display = publish_at
+        else:
+            slot = get_next_publishing_slot(existing_scheduled=existing_booked)
+            utc_iso = slot['utc_iso']
+            display = slot['display']
+
+        print(f"[*] Scheduling '{meta['title']}' for {display} (UTC: {utc_iso})...")
+        res = upload_video(
+            youtube_service,
+            str(video_path),
+            title=meta['title'],
+            description=meta['description'],
+            tags=meta['tags'],
+            scheduled_time=utc_iso,
+            dry_run=dry_run,
+        )
+
+        vid = res.get('id', 'DRY_RUN_ID')
+        url = res.get('url', f"https://youtube.com/shorts/{vid}")
+        detail = f"scheduled for {display} (YouTube ID: {vid})"
+        return self.move(
+            job['id'],
+            (job['stage'],),
+            'scheduled',
+            detail,
+            youtube_id=vid,
+            scheduled_at=utc_iso,
+            youtube_url=url,
+        )
 
     def recover_interrupted(self, usage):
         """Resolve jobs left in progress by a runner that died. Call only while holding the lock."""
@@ -307,8 +360,11 @@ def run(max_jobs=1, queue=None, usage=None, drafter=None, renderer=None, lock_pa
 # ---- CLI -----------------------------------------------------------------
 def _line(job):
     note = job['error'] or job['review_note'] or ''
+    if job.get('youtube_id'):
+        note = f"YouTube: {job['youtube_id']}"
+    sched = f" [{job['scheduled_at'][:16]}]" if job.get('scheduled_at') else ""
     return (f"{job['id'][:8]}  {job['stage']:<15} {job['attempts']}/{MAX_ATTEMPTS}  "
-            f"{job['tts_provider']:<10} {job['topic'][:40]:<40}  {note[:70]}")
+            f"{job['tts_provider']:<10} {job['topic'][:35]:<35}  {note[:45]}{sched}")
 
 
 def main(argv=None):
@@ -338,6 +394,12 @@ def main(argv=None):
     p.add_argument('--query', type=str, default=None)
     p.add_argument('--with-agy', action='store_true', help='Summon AGY Flash agent to discover queries.')
     p.add_argument('--hint', type=str, default=None)
+    p = sub.add_parser('schedule', help='Schedule an approved video on YouTube.')
+    p.add_argument('job')
+    p.add_argument('--publish-at', type=str, default=None, help='Explicit UTC ISO timestamp (e.g. 2026-10-29T15:00:00Z).')
+    p.add_argument('--dry-run', action='store_true', help='Simulate upload without sending API requests.')
+    p = sub.add_parser('schedule-approved', help='Schedule all approved videos automatically.')
+    p.add_argument('--dry-run', action='store_true', help='Simulate upload without sending API requests.')
     args = parser.parse_args(argv)
 
     queue = JobQueue()
@@ -380,6 +442,21 @@ def main(argv=None):
         elif args.command == 'replenish':
             from replenish_clips import replenish
             replenish(target=args.target, query=args.query, with_agy=args.with_agy, prompt_hint=args.hint)
+        elif args.command == 'schedule':
+            from youtube_uploader import get_authenticated_service
+            yt = None if args.dry_run else get_authenticated_service()
+            job = queue.schedule_job(args.job, youtube_service=yt, dry_run=args.dry_run, publish_at=args.publish_at)
+            print(_line(job))
+        elif args.command == 'schedule-approved':
+            from youtube_uploader import get_authenticated_service
+            approved = queue.list('approved')
+            if not approved:
+                print('No approved jobs to schedule.')
+                return 0
+            yt = None if args.dry_run else get_authenticated_service()
+            for row in approved:
+                job = queue.schedule_job(row['id'], youtube_service=yt, dry_run=args.dry_run)
+                print(_line(job))
     except ValueError as error:
         print('Error:', error)
         return 2

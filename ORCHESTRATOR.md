@@ -26,6 +26,8 @@ $env:PYTHONUTF8 = '1'
 .venv\Scripts\python.exe orchestrator.py show <id-prefix>
 .venv\Scripts\python.exe orchestrator.py approve <id-prefix> --note "good hook"
 .venv\Scripts\python.exe orchestrator.py reject <id-prefix> --note "weak ending"
+.venv\Scripts\python.exe orchestrator.py schedule <id-prefix> [--publish-at <UTC-ISO>] [--dry-run]
+.venv\Scripts\python.exe orchestrator.py schedule-approved [--dry-run]
 .venv\Scripts\python.exe orchestrator.py retry <id-prefix>
 .venv\Scripts\python.exe orchestrator.py replenish [--target 3] [--with-agy] [--query <query>]
 powershell -NoProfile -ExecutionPolicy Bypass -File .\run_orchestrator_windows.ps1 -MaxJobs 1
@@ -42,6 +44,12 @@ commands short. `--provider` defaults to `fish`; `--gameplay` and
   Can be run deterministically or with `--with-agy` to summon Antigravity CLI's
   `gemini-3.8-flash-medium` model non-interactively to discover fresh aesthetic
   queries fitting the vertical mystery/horror atmosphere.
+- **YouTube Automated Scheduling (`schedule` / `schedule-approved`):**
+  Uploads approved videos to YouTube via the Data API v3 and schedules them for release.
+  Calculates next available future slots (09:00, 14:00, 19:00 local time) converted
+  to UTC ISO 8601 with zero-collision sequential roll-over. Sets `privacyStatus='private'`
+  until `publishAt` triggers. Stores the returned `youtube_id` in SQLite so duplicate
+  uploads are strictly prevented. Supports `--dry-run` to test without sending API calls.
 - **One runner at a time.** An OS file lock (`storage/orchestrator.lock`) makes a
   second concurrent `run` exit immediately with code 0. The OS releases the lock
   if the runner is killed (verified with a hard kill on Windows).
