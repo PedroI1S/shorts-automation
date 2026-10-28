@@ -19,7 +19,8 @@ $env:HERMES_HOME = [Environment]::GetEnvironmentVariable('HERMES_HOME','User')
 
 The command disables session tools, limits tool turns, enforces a 150-second
 client timeout, rejects failed/duplicate results and observed tool events, and
-validates a 4–8-word title and 130–150-word narration. It does not retry failed
+validates a 4–8-word title and 120–146-word narration (limits in config.py;
+the prompt requests 125–140). For queued, retried production use ORCHESTRATOR.md. It does not retry failed
 generation automatically. A timeout is a client limit; remote work might finish
 after disconnection. Subscription usage is consumed, with no paid API fallback.
 

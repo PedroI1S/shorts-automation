@@ -1,5 +1,16 @@
 # Handoff: YouTube Shorts workflow and Windows migration
 
+## Orchestrator and render fixes - 2026-10-28
+
+Project is now a git repository (`git log` for history). Fixed: over-long scripts
+are rejected before any TTS call (per-provider rate estimate, `NarrationTooLong`);
+amix no longer halves narration (-6 dB measured); renders publish atomically
+via `.partial.mp4` with a 15-minute timeout; cover-scale crop handles any source
+aspect. Story limits are now 120-146 words (prompt asks 125-140), in config.py.
+Added `orchestrator.py`: durable queue topic -> draft -> render -> human review
+with bounded retries, crash recovery and a single-runner lock. Never uploads.
+See ORCHESTRATOR.md. 57 tests pass. No scheduled task installed.
+
 ## Project relocation — 2026-10-28
 
 Active project path: `C:\Users\Pedro\Documents\shorts-automation`.

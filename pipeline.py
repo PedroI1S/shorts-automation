@@ -14,6 +14,9 @@ from subtitle_engine import generate_subtitles_stream
 from video_compiler import compile_short
 from usage_store import render_job
 
+class NarrationTooLong(ValueError):
+    """The script cannot fit the duration limit; it must be shortened or redrafted."""
+
 def sanitize_filename(title: str) -> str:
     """Cleans a string for safe use in file names."""
     clean = re.sub(r'[^a-zA-Z0-9_\- ]', '', title)
@@ -50,7 +53,7 @@ def run_pipeline(
     # Reject over-long scripts before reserving the story or spending TTS quota.
     estimated = estimate_duration(script, tts_provider)
     if estimated + NARRATION_TAIL_SECONDS > MAX_DURATION_SECONDS:
-        raise ValueError(
+        raise NarrationTooLong(
             f"Script is {len(script.split())} words; estimated {estimated:.1f}s narration with "
             f"{tts_provider} exceeds the {MAX_DURATION_SECONDS}s limit. Shorten the draft; no TTS call made.")
 
@@ -59,7 +62,7 @@ def run_pipeline(
         print("\n[STEP 2/5] Generating voiceover & word timestamps...")
         audio_path, duration, sentence_blocks = generate_speech(script, voice=voice, provider=tts_provider)
         if duration + 0.8 > MAX_DURATION_SECONDS:
-            raise ValueError("Narration exceeds the video duration limit. Shorten the draft; no automatic regeneration performed.")
+            raise NarrationTooLong("Narration exceeds the video duration limit. Shorten the draft; no automatic regeneration performed.")
         print(f"🎙️ Voiceover ready: {duration:.1f}s across {len(sentence_blocks)} words")
 
         # 3. GAMEPLAY FOOTAGE SOURCING

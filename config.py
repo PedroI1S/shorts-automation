@@ -27,6 +27,11 @@ NARRATION_TAIL_SECONDS = 0.8  # Silent tail appended after narration by the comp
 # elevenlabs: short 31-word George sample measured 3.4 w/s; 2.9 adds margin.
 # edge: Christopher neural is ~150 wpm before pause tightening.
 SPEECH_WORDS_PER_SECOND = {"fish": 2.59, "elevenlabs": 2.9, "edge": 2.5}
+# Story length gates. The validator ceiling keeps Fish narration + tail under the limit
+# (146 / 2.59 = 56.4s + 0.8s = 57.2s <= 58s). The prompt asks for a narrower band so small LLM miscounts still pass.
+STORY_MIN_WORDS = 120
+STORY_MAX_WORDS = 146
+STORY_PROMPT_WORDS = (125, 140)
 
 # Audio / TTS Settings
 DEFAULT_VOICE = "en-US-ChristopherNeural"  # Deep, engaging male narrator

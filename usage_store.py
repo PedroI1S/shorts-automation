@@ -78,6 +78,13 @@ class UsageStore:
         with self.connect() as db:
             return any(db.execute('SELECT 1 FROM claims WHERE key=?', (k,)).fetchone() for k in keys)
 
+    def story_owner(self, script):
+        """Return (job_id, status, output) of the job holding this story's claim, or None."""
+        with self.connect() as db:
+            return db.execute('SELECT jobs.id, jobs.status, jobs.output FROM claims '
+                              'JOIN jobs ON jobs.id = claims.job_id WHERE claims.key=?',
+                              (story_key(script),)).fetchone()
+
     def reserve_source(self, job, metadata, path=None):
         keys = source_keys(metadata, path)
         if not keys:

@@ -21,17 +21,17 @@ def write_story(directory, words):
 
 
 class PreTtsDurationTests(unittest.TestCase):
-    def test_overlong_fish_script_rejected_before_tts_and_reservation(self):
-        # 150 words passes draft validation but at Fish's measured pace is ~58.7s with tail.
+    def test_overlong_script_rejected_before_tts_and_reservation(self):
+        # 144 words passes draft validation (<= 146) but at Edge's rate (2.5 w/s) is 58.4s with tail.
         with tempfile.TemporaryDirectory() as temp:
             store = UsageStore(Path(temp) / 'db.sqlite3')
-            story = write_story(temp, 150)
+            story = write_story(temp, 144)
             with patch('usage_store.UsageStore', return_value=store), \
                  patch.object(pipeline, 'generate_speech') as speech, redirect_stdout(io.StringIO()):
                 with self.assertRaisesRegex(ValueError, 'no TTS call made'):
-                    pipeline.run_pipeline(story_file=story, tts_provider='fish')
+                    pipeline.run_pipeline(story_file=story, tts_provider='edge')
                 speech.assert_not_called()
-            store.begin(' '.join(['word'] * 150))  # Story was never reserved.
+            store.begin(' '.join(['word'] * 144))  # Story was never reserved.
 
     def test_known_good_fish_length_reaches_tts(self):
         # 146 words rendered at 56.29s on the real Fish voice; it must not be rejected.

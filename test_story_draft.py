@@ -5,12 +5,12 @@ from draft_story import parse_result, validate_story
 
 class DraftTests(unittest.TestCase):
     def test_rejects_overlong_and_short_scripts(self):
-        for count in (80, 129, 151, 300):
+        for count in (80, 119, 147, 150, 300):
             with self.subTest(count=count), self.assertRaises(ValueError):
                 validate_story({"title": "The Voice Behind My Door", "script": "word " * count})
 
     def test_accepts_boundaries_and_normalizes(self):
-        for count in (130, 150):
+        for count in (120, 146):
             story = validate_story({"title": "The Voice Behind My Door", "script": "word\n" * count})
             self.assertEqual(len(story["script"].split()), count)
 
