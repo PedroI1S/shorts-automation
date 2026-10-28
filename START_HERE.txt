@@ -1,0 +1,28 @@
+PROMPT FOR THE NEW GPT SESSION ON THE WINDOWS PC
+
+Continue my YouTube Shorts automation project from the Mac session.
+Read AGENTS.md, HANDOFF.md and SETUP_WINDOWS.md in this project first, then inspect
+the files. HANDOFF.md contains the detailed history, accepted results, known bugs,
+tested artifacts, and the remaining work. Do not assume the whole pipeline is
+already ready for unattended operation.
+
+This PC has a Ryzen 5 4600G, integrated graphics and 16 GB DDR4. Keep Windows.
+I want to run it around the clock eventually and fix it remotely using Hermes
+Agent through Telegram. I also use MonoCode with OpenCode CLI and free DeepSeek;
+the Hermes model connection has not been configured or verified yet.
+
+For now I want free services only. Do not buy credits, upgrade subscriptions, or
+silently fall back to paid providers. Fish Audio and ElevenLabs both worked on
+the Mac; I prefer the current Fish voice but want both available. Keep the working
+speech synchronization and the yellow highlight that follows the spoken word.
+
+First verify this Windows environment, install/check the prerequisites, run the
+tests and render the offline Fish sample using run_preview_windows.ps1. The package
+includes cached audio and timestamps, so this needs no generation API calls.
+Then help configure Hermes + Telegram and the model connection. Make useful
+progress with the files and tools available. Do not enable publishing just as
+part of setting up the PC.
+
+API keys were excluded from the prepared ZIP. If needed I can enter them locally
+or transfer the ignored credential JSON files privately; do not ask me to paste
+keys or bot tokens into chat. Blank credential examples are included.

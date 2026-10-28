@@ -1,0 +1,57 @@
+import os
+from pathlib import Path
+
+# Base Paths
+BASE_DIR = Path(__file__).resolve().parent
+STORAGE_DIR = BASE_DIR / "storage"
+BACKGROUNDS_DIR = STORAGE_DIR / "backgrounds"
+AUDIO_DIR = STORAGE_DIR / "audio"
+SUBTITLES_DIR = STORAGE_DIR / "subtitles"
+OUTPUT_DIR = STORAGE_DIR / "output"
+TEMP_DIR = STORAGE_DIR / "temp"
+
+for d in [BACKGROUNDS_DIR, AUDIO_DIR, SUBTITLES_DIR, OUTPUT_DIR, TEMP_DIR]:
+    d.mkdir(parents=True, exist_ok=True)
+
+# Video Specs (YouTube Shorts / TikTok standard)
+VIDEO_WIDTH = 1080
+VIDEO_HEIGHT = 1920
+FPS = 30
+MAX_DURATION_SECONDS = 58
+MIN_DURATION_SECONDS = 45
+
+# Audio / TTS Settings
+DEFAULT_VOICE = "en-US-ChristopherNeural"  # Deep, engaging male narrator
+# Alternative voices:
+# "en-US-GuyNeural"
+# "en-US-JennyNeural" (Female)
+# "en-GB-RyanNeural" (British accent)
+
+# Font & Subtitle Styling
+_font_candidates = [
+    os.getenv("SUBTITLE_FONT_PATH", ""),
+    "/System/Library/Fonts/Supplemental/Impact.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+    "C:/Windows/Fonts/impact.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+]
+FONT_PATH = next((path for path in _font_candidates if path and os.path.isfile(path)), "")
+
+SUBTITLE_FONT_SIZE = 72
+SUBTITLE_PRIMARY_COLOR = (255, 255, 255, 255)       # White
+SUBTITLE_HIGHLIGHT_COLOR = (255, 225, 0, 255)       # Electric Yellow
+SUBTITLE_STROKE_COLOR = (0, 0, 0, 255)              # Deep Black Outline
+SUBTITLE_STROKE_WIDTH = 5
+SUBTITLE_BOX_BG = (0, 0, 0, 160)                    # Semi-transparent dark card
+SUBTITLE_WORDS_PER_CHUNK = 3                        # Fast TikTok/Shorts pacing
+
+# LLM / Story Generation Settings
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "hermes3:latest")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# Default Gameplay Search Queries
+GAMEPLAY_QUERIES = [
+    "Labyrinth Minetest",
+]

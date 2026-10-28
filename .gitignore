@@ -1,0 +1,18 @@
+venv/
+.venv/
+__pycache__/
+storage/
+.env
+elevenlabs.local.json
+client_secret.json
+token.json
+fish.local.json
+opencode.local.json
+deployment/
+# Defensive catch-alls for credentials and local state
+*.local.json
+client_secret*.json
+token*.json
+*.sqlite3
+*.mp4
+*.mp3
