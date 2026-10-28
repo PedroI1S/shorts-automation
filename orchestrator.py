@@ -333,6 +333,11 @@ def main(argv=None):
         p.add_argument('--note')
     p = sub.add_parser('retry', help='Requeue a failed or needs_attention job.')
     p.add_argument('job')
+    p = sub.add_parser('replenish', help='Replenish unreserved background footage pool.')
+    p.add_argument('--target', type=int, default=3)
+    p.add_argument('--query', type=str, default=None)
+    p.add_argument('--with-agy', action='store_true', help='Summon AGY Flash agent to discover queries.')
+    p.add_argument('--hint', type=str, default=None)
     args = parser.parse_args(argv)
 
     queue = JobQueue()
@@ -372,6 +377,9 @@ def main(argv=None):
             print(_line(queue.review(args.job, decision, args.note)))
         elif args.command == 'retry':
             print(_line(queue.retry(args.job, UsageStore())))
+        elif args.command == 'replenish':
+            from replenish_clips import replenish
+            replenish(target=args.target, query=args.query, with_agy=args.with_agy, prompt_hint=args.hint)
     except ValueError as error:
         print('Error:', error)
         return 2

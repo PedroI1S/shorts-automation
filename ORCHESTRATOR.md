@@ -27,6 +27,7 @@ $env:PYTHONUTF8 = '1'
 .venv\Scripts\python.exe orchestrator.py approve <id-prefix> --note "good hook"
 .venv\Scripts\python.exe orchestrator.py reject <id-prefix> --note "weak ending"
 .venv\Scripts\python.exe orchestrator.py retry <id-prefix>
+.venv\Scripts\python.exe orchestrator.py replenish [--target 3] [--with-agy] [--query <query>]
 powershell -NoProfile -ExecutionPolicy Bypass -File .\run_orchestrator_windows.ps1 -MaxJobs 1
 ```
 
@@ -36,6 +37,11 @@ commands short. `--provider` defaults to `fish`; `--gameplay` and
 
 ## Behaviour
 
+- **Background Footage Replenishment (`replenish`):**
+  Ensures a minimum pool of unreserved CC0/CC-BY clips in `storage/backgrounds/`.
+  Can be run deterministically or with `--with-agy` to summon Antigravity CLI's
+  `gemini-3.8-flash-medium` model non-interactively to discover fresh aesthetic
+  queries fitting the vertical mystery/horror atmosphere.
 - **One runner at a time.** An OS file lock (`storage/orchestrator.lock`) makes a
   second concurrent `run` exit immediately with code 0. The OS releases the lock
   if the runner is killed (verified with a hard kill on Windows).
