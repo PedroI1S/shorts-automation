@@ -5,10 +5,10 @@ import json
 from uuid import uuid4
 from pathlib import Path
 
-from config import DEFAULT_VOICE, OUTPUT_DIR, MAX_DURATION_SECONDS
+from config import DEFAULT_VOICE, OUTPUT_DIR, MAX_DURATION_SECONDS, NARRATION_TAIL_SECONDS
 from draft_story import validate_story
 from content_hunter import generate_story
-from tts_engine import generate_speech
+from tts_engine import generate_speech, estimate_duration
 from gameplay_fetcher import get_background_clip, get_video_duration
 from subtitle_engine import generate_subtitles_stream
 from video_compiler import compile_short
@@ -46,6 +46,13 @@ def run_pipeline(
     script = story.get("script", "")
     print(f"📖 Title: {title}")
     print(f"📝 Script preview: \"{script[:100]}...\"")
+
+    # Reject over-long scripts before reserving the story or spending TTS quota.
+    estimated = estimate_duration(script, tts_provider)
+    if estimated + NARRATION_TAIL_SECONDS > MAX_DURATION_SECONDS:
+        raise ValueError(
+            f"Script is {len(script.split())} words; estimated {estimated:.1f}s narration with "
+            f"{tts_provider} exceeds the {MAX_DURATION_SECONDS}s limit. Shorten the draft; no TTS call made.")
 
     with render_job(script) as (store, job_id):
         # 2. VOICE SYNTHESIS & TIMINGS

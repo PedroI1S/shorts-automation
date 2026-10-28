@@ -44,12 +44,14 @@ def compile_short(
     # Complex Filter Construction
     if gameplay_has_audio:
         # Scale to fit 1920 height, center-crop to 1080 width, overlay subtitles
-        # Mix background audio (-26dB ~ 5%) with primary narration audio (100%)
+        # Mix background audio (-24dB ~ 6%) with primary narration audio (100%).
+        # normalize=0 stops amix from dividing every input by the input count,
+        # which would otherwise halve the narration volume.
         filter_complex = (
             f"[0:v]scale=-1:{VIDEO_HEIGHT},crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}[bg];"
             f"[bg][1:v]overlay=0:0[outv];"
             f"[0:a]volume=0.06[abg];"
-            f"[2:a][abg]amix=inputs=2:duration=first:dropout_transition=2[outa]"
+            f"[2:a][abg]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[outa]"
         )
         audio_map = ["-map", "[outa]"]
     else:

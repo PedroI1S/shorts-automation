@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 import edge_tts
 import requests
-from config import AUDIO_DIR, DEFAULT_VOICE, BASE_DIR
+from config import AUDIO_DIR, DEFAULT_VOICE, BASE_DIR, SPEECH_WORDS_PER_SECOND
 
 def prepare_text(text: str) -> str:
     """Remove layout pauses and exaggerated punctuation before synthesis."""
@@ -18,6 +18,12 @@ def prepare_text(text: str) -> str:
     if not text:
         raise ValueError("Narration text is empty.")
     return text
+
+def estimate_duration(text: str, provider: str) -> float:
+    """Predict narration seconds from word count, without calling any TTS API."""
+    if provider not in SPEECH_WORDS_PER_SECOND:
+        raise ValueError(f"Unknown speech provider: {provider}")
+    return len(prepare_text(text).split()) / SPEECH_WORDS_PER_SECOND[provider]
 
 
 def audio_duration(path: Path) -> float:

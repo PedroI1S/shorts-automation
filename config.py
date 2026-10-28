@@ -19,6 +19,14 @@ VIDEO_HEIGHT = 1920
 FPS = 30
 MAX_DURATION_SECONDS = 58
 MIN_DURATION_SECONDS = 45
+NARRATION_TAIL_SECONDS = 0.8  # Silent tail appended after narration by the compiler
+
+# Speaking rates (words/second) used to reject over-long scripts BEFORE any paid
+# or quota-limited TTS call. Lower = more conservative (predicts longer audio).
+# fish: measured 146 words -> 56.29 s (2.59 w/s) on the selected voice.
+# elevenlabs: short 31-word George sample measured 3.4 w/s; 2.9 adds margin.
+# edge: Christopher neural is ~150 wpm before pause tightening.
+SPEECH_WORDS_PER_SECOND = {"fish": 2.59, "elevenlabs": 2.9, "edge": 2.5}
 
 # Audio / TTS Settings
 DEFAULT_VOICE = "en-US-ChristopherNeural"  # Deep, engaging male narrator
