@@ -1,8 +1,11 @@
+import os
 import subprocess
 from pathlib import Path
 from config import (
-    VIDEO_WIDTH, VIDEO_HEIGHT, FPS, OUTPUT_DIR
+    VIDEO_WIDTH, VIDEO_HEIGHT, FPS, OUTPUT_DIR, NARRATION_TAIL_SECONDS
 )
+
+RENDER_TIMEOUT_SECONDS = 900  # A stuck FFmpeg must not block a 24/7 queue forever.
 
 def has_audio_stream(file_path: Path) -> bool:
     """Checks if a video file contains an audio stream."""
@@ -29,36 +32,41 @@ def compile_short(
 ) -> Path:
     """
     Renders the final vertical YouTube Short:
-    - Crops 16:9 gameplay to 9:16 (1080x1920) centered
+    - Scales any source aspect ratio to cover 1080x1920, then center-crops
     - Overlays synchronized subtitle cards
-    - Mixes narration with background gameplay audio (ducked to 5%)
-    - Outputs ready-to-upload MP4
+    - Mixes narration with background gameplay audio (ducked to 6%)
+    - Writes to a temporary file and publishes it atomically, so the final
+      filename only ever exists as a complete, successfully rendered MP4
     """
     output_path = OUTPUT_DIR / output_filename
-    target_duration = audio_duration + 0.8  # Slight tail buffer
+    partial_path = output_path.with_name(output_path.stem + ".partial.mp4")
+    target_duration = audio_duration + NARRATION_TAIL_SECONDS  # Slight tail buffer
 
     print(f"[*] Compiling final short ({target_duration:.1f}s)...")
 
     gameplay_has_audio = has_audio_stream(gameplay_path)
 
+    # Cover-scale keeps the aspect ratio and guarantees both dimensions reach the
+    # frame, so crop never fails on sources narrower than 9:16 (or wider than 16:9).
+    video_chain = (
+        f"[0:v]scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
+        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},setsar=1[bg];"
+        f"[bg][1:v]overlay=0:0[outv]"
+    )
+
     # Complex Filter Construction
     if gameplay_has_audio:
-        # Scale to fit 1920 height, center-crop to 1080 width, overlay subtitles
         # Mix background audio (-24dB ~ 6%) with primary narration audio (100%).
         # normalize=0 stops amix from dividing every input by the input count,
         # which would otherwise halve the narration volume.
         filter_complex = (
-            f"[0:v]scale=-1:{VIDEO_HEIGHT},crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}[bg];"
-            f"[bg][1:v]overlay=0:0[outv];"
+            video_chain + ";"
             f"[0:a]volume=0.06[abg];"
             f"[2:a][abg]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[outa]"
         )
         audio_map = ["-map", "[outa]"]
     else:
-        filter_complex = (
-            f"[0:v]scale=-1:{VIDEO_HEIGHT},crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}[bg];"
-            f"[bg][1:v]overlay=0:0[outv]"
-        )
+        filter_complex = video_chain
         audio_map = ["-map", "2:a"]
 
     cmd = [
@@ -80,14 +88,24 @@ def compile_short(
         "-c:a", "aac",
         "-b:a", "192k",
         "-t", f"{target_duration:.2f}",
-        str(output_path)
+        "-movflags", "+faststart",
+        str(partial_path)
     ]
 
     print(f"[*] Executing FFmpeg render...")
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    if res.returncode != 0:
-        print("[!] FFmpeg error details:\n", res.stderr)
-        raise RuntimeError("FFmpeg video rendering failed.")
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=RENDER_TIMEOUT_SECONDS)
+        if res.returncode != 0:
+            print("[!] FFmpeg error details:\n", res.stderr)
+            raise RuntimeError("FFmpeg video rendering failed.")
+        if not partial_path.is_file() or partial_path.stat().st_size == 0:
+            raise RuntimeError("FFmpeg reported success but produced no output.")
+        os.replace(partial_path, output_path)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"FFmpeg render exceeded {RENDER_TIMEOUT_SECONDS}s and was stopped.") from None
+    finally:
+        # Never leave a truncated file behind; the final name is untouched on failure.
+        partial_path.unlink(missing_ok=True)
 
     print(f"[✓] Final short exported successfully to: {output_path}")
     return output_path
