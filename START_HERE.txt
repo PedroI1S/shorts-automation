@@ -1,28 +1,25 @@
-PROMPT FOR THE NEW GPT SESSION ON THE WINDOWS PC
+SHORTS AUTOMATION - START HERE
 
-Continue my YouTube Shorts automation project from the Mac session.
-Read AGENTS.md, HANDOFF.md and SETUP_WINDOWS.md in this project first, then inspect
-the files. HANDOFF.md contains the detailed history, accepted results, known bugs,
-tested artifacts, and the remaining work. Do not assume the whole pipeline is
-already ready for unattended operation.
+Open C:\Users\Pedro\Documents\shorts-automation, not the stale OneDrive copy.
+Read README.md for commands and docs/README.md for the guide index.
+For another coding session, read AGENTS.md and HANDOFF.md first.
+Workflow source is grouped in shorts_automation/ by automation, stories, footage,
+rendering, publishing and state. Windows launchers live beside their workflows.
+All formerly root JSON files are in secrets/ (including production.json).
+Old evaluation code is in legacy/. See docs/DEVELOPMENT.md for the source map.
 
-This PC has a Ryzen 5 4600G, integrated graphics and 16 GB DDR4. Keep Windows.
-I want to run it around the clock eventually and fix it remotely using Hermes
-Agent through Telegram. I also use MonoCode with OpenCode CLI and free DeepSeek;
-the Hermes model connection has not been configured or verified yet.
+Verify without AI calls:
+  .\.venv\Scripts\python.exe -m unittest discover -v
+  powershell -NoProfile -ExecutionPolicy Bypass -File .\shorts_automation\rendering\run_preview_windows.ps1
 
-For now I want free services only. Do not buy credits, upgrade subscriptions, or
-silently fall back to paid providers. Fish Audio and ElevenLabs both worked on
-the Mac; I prefer the current Fish voice but want both available. Keep the working
-speech synchronization and the yellow highlight that follows the spoken word.
+Inspect the worker:
+  .\.venv\Scripts\python.exe production.py status
 
-First verify this Windows environment, install/check the prerequisites, run the
-tests and render the offline Fish sample using run_preview_windows.ps1. The package
-includes cached audio and timestamps, so this needs no generation API calls.
-Then help configure Hermes + Telegram and the model connection. Make useful
-progress with the files and tools available. Do not enable publishing just as
-part of setting up the PC.
+The Windows worker is installed. It wakes every 30 minutes and at sign-in.
+Public scheduling is ENABLED by the user's explicit request on 2026-10-29,
+with Telegram notifications. Slots: 07:00, 12:00 and 19:00 America/New_York.
+Keep at least three confirmed future public uploads; the worker refills toward four.
+Preserve this mode during setup and maintenance; change it only at the user's request.
 
-API keys were excluded from the prepared ZIP. If needed I can enter them locally
-or transfer the ignored credential JSON files privately; do not ask me to paste
-keys or bot tokens into chat. Blank credential examples are included.
+Keep credentials private. Use build_transfer_package.py for transfers.
+Historical migration notes are in docs/history/ and are not current setup status.

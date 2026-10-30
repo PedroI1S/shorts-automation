@@ -2,6 +2,7 @@ venv/
 .venv/
 __pycache__/
 storage/
+secrets/
 .env
 elevenlabs.local.json
 client_secret.json
@@ -16,3 +17,11 @@ token*.json
 *.sqlite3
 *.mp4
 *.mp3
+.ruff_cache/
+.pytest_cache/
+*.py[cod]
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
