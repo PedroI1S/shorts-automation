@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -11,6 +12,34 @@ from pathlib import Path
 from uuid import uuid4
 
 from config import BASE_DIR, STORAGE_DIR, STORY_MAX_WORDS, STORY_PROMPT_MAX_WORDS
+
+
+def validate_series_info(data):
+    if not isinstance(data, dict):
+        raise ValueError("Series metadata must be an object.")
+    identity, title = data.get("id"), data.get("title")
+    part, total = data.get("part"), data.get("total")
+    if not isinstance(identity, str) or not re.fullmatch(r"[a-f0-9]{32}", identity):
+        raise ValueError("Series needs its durable identifier.")
+    if not isinstance(title, str) or not 4 <= len(title.split()) <= 8 or len(title) > 80:
+        raise ValueError("Series title must be 4 to 8 words and at most 80 characters.")
+    if (
+        type(total) is not int
+        or total not in (3, 4)
+        or type(part) is not int
+        or not 1 <= part <= total
+    ):
+        raise ValueError("Series must have 3 or 4 correctly numbered parts.")
+    ending = "finale" if part == total else "cliffhanger"
+    if data.get("ending") != ending:
+        raise ValueError("Early parts need cliffhangers; the final part needs a payoff.")
+    return {
+        "id": identity,
+        "title": " ".join(title.split()),
+        "part": part,
+        "total": total,
+        "ending": ending,
+    }
 
 
 def validate_story(data):
@@ -29,10 +58,12 @@ def validate_story(data):
             if data[field] not in ("female", "male", "unspecified"):
                 raise ValueError(f"Invalid {field}; use female, male or unspecified.")
             story[field] = data[field]
+    if "series" in data:
+        story["series"] = validate_series_info(data["series"])
     return story
 
 
-def parse_result(output):
+def parse_result(output, validator=validate_story):
     results = []
     for line in output.splitlines():
         try:
@@ -46,10 +77,10 @@ def parse_result(output):
                 results.append(event)
     if len(results) != 1 or results[0].get("exit_code") != 0:
         raise RuntimeError("Hermes did not return one successful result; no fallback used.")
-    return validate_story(json.loads(results[0]["text"]))
+    return validator(json.loads(results[0]["text"]))
 
 
-def query_hermes(prompt, repair_remaining=1):
+def query_hermes(prompt, repair_remaining=1, validator=validate_story):
     home = os.environ.get("HERMES_HOME")
     executable = str(Path(home) / "bin/hermes.exe") if home else shutil.which("hermes")
     if not executable or not Path(executable).is_file():
@@ -88,7 +119,7 @@ def query_hermes(prompt, repair_remaining=1):
     if result.returncode:
         raise RuntimeError("Hermes drafting failed; inspect Hermes locally. No fallback used.")
     try:
-        return parse_result(result.stdout)
+        return parse_result(result.stdout, validator)
     except ValueError as error:
         if not repair_remaining:
             raise
@@ -100,6 +131,7 @@ def query_hermes(prompt, repair_remaining=1):
             + "Previous response (content only): "
             + result.stdout[-8000:],
             repair_remaining=0,
+            validator=validator,
         )
 
 

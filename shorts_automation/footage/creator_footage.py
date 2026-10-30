@@ -17,6 +17,12 @@ from uuid import uuid4
 from config import BACKGROUNDS_DIR
 from shorts_automation.footage.creator_evidence import inspect_page, read_video
 from shorts_automation.footage.gameplay_fetcher import get_video_duration
+from shorts_automation.footage.video_quality import (
+    PREPARATION_POLICY,
+    VERTICAL_FILTER,
+    has_vertical_detail,
+    require_vertical_detail,
+)
 from shorts_automation.state.source_lock import synchronized
 from shorts_automation.state.usage_store import SEGMENT_POLICY, UsageStore
 
@@ -79,6 +85,7 @@ def cached_creator_clip(allowed_licenses):
                 and not store.source_unavailable(metadata)
                 and hashlib.sha256(video.read_bytes()).hexdigest() == metadata.get("sha256")
                 and get_video_duration(video) >= 58
+                and has_vertical_detail(video)
             ):
                 if metadata != original:
                     write_metadata(sidecar, metadata)
@@ -154,6 +161,8 @@ def import_creator_clip(record, allowed_licenses):
     if file_size > 3 * 1024**3:
         raise ValueError("Creator original exceeds the 3 GiB source budget.")
     direct = page["direct_file_url"]
+    geometry = require_vertical_detail(direct)
+    metadata.update(geometry, preparation_policy=PREPARATION_POLICY)
     registry = BACKGROUNDS_DIR / "creator_sources"
     registry.mkdir(exist_ok=True)
     # Stable creator records, not expiring signed file URLs, feed later allocations.
@@ -185,13 +194,13 @@ def import_creator_clip(record, allowed_licenses):
                 "0:v:0",
                 "-an",
                 "-vf",
-                "scale=-2:'min(1080,ih)'",
+                VERTICAL_FILTER,
                 "-c:v",
                 "libx264",
                 "-preset",
                 "fast",
                 "-crf",
-                "20",
+                "18",
                 "-pix_fmt",
                 "yuv420p",
                 "-movflags",
@@ -207,20 +216,21 @@ def import_creator_clip(record, allowed_licenses):
             raise RuntimeError(
                 "Creator-file segment extraction failed; no alternate paid source used."
             )
+        require_vertical_detail(staged)
         digest = hashlib.sha256(staged.read_bytes()).hexdigest()
         metadata.update(
             sha256=digest,
             segment_start=start,
             segment_duration=60,
             looped=False,
-            changes=f"Creator-linked file; extracted 60 seconds from {start:g}s, muted, H.264 normalized at up to 1080p.",
+            changes=f"Creator-linked file; extracted 60 seconds from {start:g}s, muted, center-cropped at native resolution then downscaled to 1080x1920 without enlargement.",
         )
         # Final duplicate check after extraction, before publication to the pool.
         if store.source_unavailable(metadata):
             raise ValueError("Creator footage was reserved while importing.")
         target = (
             BACKGROUNDS_DIR
-            / f"creator_{video_id}_{round(start * 1000):09d}_{round((start + 60) * 1000):09d}.mp4"
+            / f"creator_{video_id}_{round(start * 1000):09d}_{round((start + 60) * 1000):09d}_vertical_v1.mp4"
         )
         staged.replace(target)
         sidecar = target.with_suffix(".source.json")
@@ -241,6 +251,7 @@ def import_local_creator_clip(original, allowed_licenses):
         raise ValueError("Local original size differs from provenance.")
     if source.get("youtube_video_id") != "Io2-_UUlUOg":
         raise ValueError("This local original has not been authorized by the user.")
+    geometry = require_vertical_detail(original)
     metadata = dict(
         schema=2,
         query=CREATOR_QUERY,
@@ -258,6 +269,8 @@ def import_local_creator_clip(original, allowed_licenses):
         credit_text=source.get("credit_statement", ""),
         credit_required=False,
         source_duration=source["ffprobe_duration_seconds"],
+        **geometry,
+        preparation_policy=PREPARATION_POLICY,
         original_provenance_sha256=source["sha256"],
         publication_cleared=False,
         requires_visual_review=True,
@@ -287,13 +300,13 @@ def import_local_creator_clip(original, allowed_licenses):
                 "0:v:0",
                 "-an",
                 "-vf",
-                "scale=-2:'min(1080,ih)'",
+                VERTICAL_FILTER,
                 "-c:v",
                 "libx264",
                 "-preset",
                 "fast",
                 "-crf",
-                "20",
+                "18",
                 "-pix_fmt",
                 "yuv420p",
                 "-movflags",
@@ -307,16 +320,17 @@ def import_local_creator_clip(original, allowed_licenses):
         )
         if result.returncode or get_video_duration(staged) < 59.9:
             raise RuntimeError("Local creator segment extraction failed.")
+        require_vertical_detail(staged)
         metadata.update(
             sha256=hashlib.sha256(staged.read_bytes()).hexdigest(),
             looped=False,
-            changes=f"Local creator file; extracted 60 seconds from {start:g}s, muted and normalized.",
+            changes=f"Local creator file; extracted 60 seconds from {start:g}s, muted, center-cropped at native resolution then downscaled to 1080x1920 without enlargement.",
         )
         if store.source_unavailable(metadata):
             raise ValueError("Creator footage was reserved while importing.")
         target = (
             BACKGROUNDS_DIR
-            / f"creator_{source['youtube_video_id']}_{round(start * 1000):09d}_{round((start + 60) * 1000):09d}.mp4"
+            / f"creator_{source['youtube_video_id']}_{round(start * 1000):09d}_{round((start + 60) * 1000):09d}_vertical_v1.mp4"
         )
         staged.replace(target)
         write_metadata(target.with_suffix(".source.json"), metadata)
@@ -391,6 +405,7 @@ def replenish_low_supply(config, store):
             and metadata.get("segment_policy") == SEGMENT_POLICY
             and hashlib.sha256(video.read_bytes()).hexdigest() == metadata.get("sha256")
             and get_video_duration(video) >= 58
+            and has_vertical_detail(video)
             and not store.source_unavailable(metadata, video)
         ):
             return dict(result, status="backup_available")

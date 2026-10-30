@@ -98,6 +98,7 @@ class ProductionTests(unittest.TestCase):
         self.harness = Harness(self.root)
         self.config = p.load_config()
         self.config.update(
+            story_format="standalone",
             publish_enabled=True,
             private_upload_enabled=False,
             telegram_notify_enabled=False,

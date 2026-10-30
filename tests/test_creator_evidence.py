@@ -205,6 +205,12 @@ class CreatorImportTests(unittest.TestCase):
             patch("shorts_automation.footage.creator_footage.UsageStore") as store,
             patch("shorts_automation.footage.creator_footage.inspect_page", return_value=page),
             patch("shorts_automation.footage.creator_footage.get_video_duration", return_value=60),
+            patch(
+                "shorts_automation.footage.creator_footage.require_vertical_detail", return_value={}
+            ),
+            patch(
+                "shorts_automation.footage.creator_footage.has_vertical_detail", return_value=True
+            ),
             patch("shorts_automation.footage.creator_footage.subprocess.run", side_effect=render),
         ):
             store.return_value.unavailable.return_value = False
@@ -256,6 +262,12 @@ class CreatorImportTests(unittest.TestCase):
             patch("shorts_automation.footage.creator_footage.read_video", return_value=self.video),
             patch("shorts_automation.footage.creator_footage.inspect_page", return_value=page),
             patch("shorts_automation.footage.creator_footage.get_video_duration", return_value=60),
+            patch(
+                "shorts_automation.footage.creator_footage.require_vertical_detail", return_value={}
+            ),
+            patch(
+                "shorts_automation.footage.creator_footage.has_vertical_detail", return_value=True
+            ),
             patch("shorts_automation.footage.creator_footage.subprocess.run", side_effect=render),
             patch("shorts_automation.footage.agy_footage_research.research") as research,
         ):

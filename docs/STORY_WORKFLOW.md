@@ -47,6 +47,59 @@ Fresh narration consumes allowance. Source/story identity is reserved through
 SQLite, including for supplied footage. The automatic worker obtains creator
 footage before spending TTS allowance; see [footage research](FOOTAGE_RESEARCH.md).
 
+## Stories across 3–4 Shorts
+
+The user selected a mix of series and standalone stories. In mixed mode, three
+standalone releases separate serial arcs. The worker prefers alternating 3- and
+4-part arcs, using a supported length that fits consecutive free publishing slots.
+Each part uses one normal Short slot; the schedule stays 07:00, 12:00 and 19:00
+America/New_York. Already drafted, rendered and scheduled standalone jobs are retained.
+
+The series brief is prompts/story_horror_series.md. One complete arc and continuity
+bible are drafted together, then the whole arc receives an editorial rewrite.
+Early parts end with a concrete cliffhanger; the next part answers it promptly
+while escalating the same threat. The final part resolves the central danger and
+planted clue, with an optional unsettling implication. There is no fake promise
+of a Part 5 or padding to reach a duration target. Each script retains the 140-word
+prompt target, 146-word validation ceiling and 58-second measured video maximum.
+
+The protagonist, gender, provider and actual narration voice stay consistent.
+Every script is saved before the first TTS call, under
+storage/stories/series/<series-id>/manifest.json and part_01.json, part_02.json, etc.
+Bundle admission is atomic; a restart reuses the same complete draft. An overlong
+or altered part requires inspection of the arc instead of independently redrafting
+one episode and breaking continuity. Ordinary source/render failures retain the bundle.
+
+The worker renders at most one part per pass. It validates every part and checks
+voice consistency before approving or scheduling Part 1. Prepared parts are then
+uploaded in story order, at consecutive assigned slots. A finished arc can briefly
+raise the future scheduled reserve above four; another arc is not started while
+the reserve is full. If the reserve is below its minimum or the next release is
+too close, a standalone replacement takes priority over starting a new series.
+
+Video overlays show PART 1/3 (or 1/4). Nonfinal parts display a continuation cue
+during their final two seconds, including the existing silent tail; speech timing,
+yellow word highlighting and video length are unchanged. The final part has no
+continuation cue. YouTube titles use `Part 1/3: <series title> #shorts`, with the
+same searchable name throughout. Descriptions point viewers toward the next part
+on the channel without claiming it is already public. Telegram upload notices
+identify the series part too.
+
+For a text-only draft on demand (two bounded model calls, no TTS/upload):
+
+```powershell
+.\.venv\Scripts\python.exe -m shorts_automation.stories.series_story --topic 'A recorded voice predicts each attempted escape' --parts 3
+```
+
+This command saves a review bundle; it does not queue or publish it. Automatic
+production creates its own durable series reservation. Inspect existing automatic
+parts with `orchestrator.py status` and `orchestrator.py show <job-id>`.
+Queue scheduling refuses missing/unapproved continuations, changed voices, reversed
+order and uncertain earlier uploads. Bulk dry runs preview the whole arc without
+fake IDs or state changes. YouTube uploads are separate API operations: a lost
+response can still leave a partially scheduled series requiring explicit channel
+inspection and reconciliation. Later parts stay blocked in that case.
+
 ## Voice providers
 
 - Fish is preferred with the selected local voice and the explicit s2.1-pro-free

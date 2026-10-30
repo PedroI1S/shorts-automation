@@ -33,11 +33,31 @@ def create_subtitle_image(
     highlight_first_word: bool = True,
     *,
     highlight_index: int | None = 0,
+    part_label: str | None = None,
+    continuation: str | None = None,
 ):
     """Draws a high-impact, transparent subtitle overlay image with outline and dark card."""
     img = Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
     font = get_font(SUBTITLE_FONT_SIZE)
+    for label, y in ((part_label, 300), (continuation, 1450)):
+        if not label:
+            continue
+        label_font = get_font(44)
+        bounds = draw.textbbox((0, 0), label, font=label_font, stroke_width=2)
+        width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+        left = (VIDEO_WIDTH - width) // 2
+        draw.rounded_rectangle(
+            (left - 22, y - 12, left + width + 22, y + height + 20), radius=16, fill=(0, 0, 0, 210)
+        )
+        draw.text(
+            (left, y),
+            label,
+            font=label_font,
+            fill=SUBTITLE_PRIMARY_COLOR,
+            stroke_width=2,
+            stroke_fill=SUBTITLE_STROKE_COLOR,
+        )
 
     clean_text = text.upper().strip()
     words = clean_text.split()
@@ -182,23 +202,54 @@ def build_highlight_cues(word_blocks: list[dict], total_duration: float) -> list
     return frames
 
 
-def generate_subtitles_stream(sentence_blocks: list[dict], total_audio_duration: float) -> Path:
+def generate_subtitles_stream(
+    sentence_blocks: list[dict], total_audio_duration: float, *, series=None
+) -> Path:
     """Create caption images on an absolute timeline from TTS word boundaries."""
     cues = build_highlight_cues(sentence_blocks, total_audio_duration)
     # Each render owns its assets, including when another batch is still running.
     slides_dir = Path(tempfile.mkdtemp(prefix="captions_", dir=TEMP_DIR))
+    part_label, continuation = None, None
+    if series:
+        from shorts_automation.stories.draft_story import validate_series_info
+
+        series = validate_series_info(series)
+        part_label = f"PART {series['part']}/{series['total']}"
+        if series["part"] < series["total"]:
+            continuation = f"NEXT: PART {series['part'] + 1} ON THIS CHANNEL"
     blank_path = slides_dir / "blank.png"
-    Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 0)).save(blank_path)
-    entries, cursor = [], 0.0
-    for i, cue in enumerate(cues):
+    if part_label:
+        create_subtitle_image("", blank_path, part_label=part_label)
+    else:
+        Image.new("RGBA", (VIDEO_WIDTH, VIDEO_HEIGHT), (0, 0, 0, 0)).save(blank_path)
+    timeline, cursor = [], 0.0
+    for cue in cues:
         if cue["start"] > cursor:
-            entries.append((blank_path, cue["start"] - cursor))
-        slide = slides_dir / f"slide_{i:04d}.png"
-        create_subtitle_image(cue["text"], slide, highlight_index=cue["highlight_index"])
-        entries.append((slide, cue["end"] - cue["start"]))
+            timeline.append((None, cursor, cue["start"]))
+        timeline.append((cue, cue["start"], cue["end"]))
         cursor = cue["end"]
     # Clear the last caption for the remaining audio and the compiler's tail.
-    entries.append((blank_path, max(0.0, total_audio_duration - cursor) + 0.8))
+    timeline.append((None, cursor, total_audio_duration + 0.8))
+    entries = []
+    cta_start = max(0.0, total_audio_duration - 1.2)
+    for cue, start, end in timeline:
+        boundaries = [start, end]
+        if continuation and start < cta_start < end:
+            boundaries.insert(1, cta_start)
+        for begin, finish in zip(boundaries, boundaries[1:]):
+            footer = continuation if continuation and begin >= cta_start else None
+            if cue or footer:
+                slide = slides_dir / f"slide_{len(entries):04d}.png"
+                options = {"part_label": part_label, "continuation": footer} if series else {}
+                create_subtitle_image(
+                    cue["text"] if cue else "",
+                    slide,
+                    highlight_index=cue["highlight_index"] if cue else None,
+                    **options,
+                )
+            else:
+                slide = blank_path
+            entries.append((slide, finish - begin))
     concat_file = slides_dir / "captions.ffconcat"
 
     def quote(path):
@@ -208,7 +259,7 @@ def generate_subtitles_stream(sentence_blocks: list[dict], total_audio_duration:
         stream.write("ffconcat version 1.0\n")
         for path, duration in entries:
             stream.write(f"file '{quote(path)}'\noption framerate 1000\nduration {duration:.6f}\n")
-        stream.write(f"file '{quote(blank_path)}'\noption framerate 1000\n")
+        stream.write(f"file '{quote(entries[-1][0])}'\noption framerate 1000\n")
     print(f"[+] Captions: {len(cues)} highlight states aligned to spoken words.")
     return concat_file
 

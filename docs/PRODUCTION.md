@@ -33,6 +33,19 @@ Settings live in ../secrets/production.json:
   finite audio, synchronized captions and the 58-second maximum still apply.
 - Each pass advances at most one automatic job. There are three failures total
   per job, with retries on later passes rather than a tight loop.
+- story_format=mixed adds serial arcs alongside standalones. With
+  series_standalones_between=3, three standalone Shorts separate arcs;
+  series_parts=[3,4] prefers alternating supported lengths. A new arc needs
+  consecutive untouched queued slots and series_min_lead_hours=4 of preparation
+  time. It also requires the minimum scheduled reserve and at least that much
+  time until the next existing release; otherwise a standalone takes priority.
+- A series is drafted/edited as a complete arc once, then rendered one part per
+  pass. All parts must pass media, continuity and actual voice checks before
+  Part 1 can be scheduled. Parts upload together in order; finishing one prepared
+  arc may temporarily exceed the four-video reserve target. No further generation
+  occurs while the reserve is full. Existing drafts and accepted schedules are
+  not converted or replaced by the new format. Missing story_format keeps the
+  earlier standalone behavior; setting standalone affects new assignments only.
 - Already prepared automatic videos are validated/scheduled before new drafting.
   Each new render is scheduled immediately, and work stops when the reserve
   reaches four. Manual jobs are counted when scheduled, never autoapproved.
@@ -97,6 +110,9 @@ test is still outstanding.
 8. When public publishing is explicitly enabled, approve validated automatic
    jobs and upload privately with their assigned future publishAt. YouTube later
    publishes them at that time. Manual jobs are never autoapproved by this worker.
+   Complete series are validated/approved together; a failed or unknown upload
+   stops later parts. Finishing an already started arc is allowed above the
+   reserve target, without further drafting, TTS or footage research.
 9. Atomically write health status and prune aged generated captions/production
    logs. Locked Windows temporary files are skipped without invalidating a pass.
 
@@ -139,8 +155,11 @@ are planned normally. Source/quota failures can prevent the target daily count.
 Source identity is reserved and not silently reused under a different query/file.
 Manual scheduling and dry-run previews also respect pending automatic slot
 reservations. A production job can still schedule its own assigned slot.
-Creator credit_text is preserved in new credit sidecars and upload descriptions;
-older renders also recover that text from their source metadata when uploading.
+Creator credit_text and full provenance remain in local credit sidecars and
+metadata. For creator-permission footage explicitly marked credit_required=false,
+public descriptions keep the gameplay, creator and source credit, while omitting
+License/Changes lines and the optional-credit policy sentence. Required credits
+and other license attribution remain intact, including for older renders.
 An unknown upload outcome stays uploading/upload_uncertain and is never
 reuploaded automatically. Inspect the channel, then use the explicit
 [queue reconciliation commands](ORCHESTRATOR.md). Resumable uploads have bounded
@@ -167,8 +186,11 @@ Minecraft parkour segment output fills the new backlog. Four current-format
 videos were uploaded with accepted public release schedules during the explicit
 2026-10-29 activation; all four Telegram notices were delivered. Real production
 reboot and interrupted-upload checks remain outstanding. Upload receipts confirm
-the accepted publishAt values; the existing upload-only OAuth grant returned
-HTTP 403 for a subsequent videos.list processing/status read.
+the accepted publishAt values. The original upload-only OAuth grant returned
+HTTP 403 for a subsequent videos.list processing/status read. The current grant
+also includes youtube.force-ssl; on 2026-10-29, live snippet/status reads and
+description-only updates succeeded for all six upcoming scheduled videos, with
+their release times and publication status verified unchanged.
 The worker stops after the verified Fish free window (currently
 2026-11-30) unless that offer is explicitly reverified. Do not buy a plan or infer
 commercial clearance from a successful render.

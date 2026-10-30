@@ -6,6 +6,36 @@ The complete chronological record is preserved in
 statements about missing Windows setup, model access or upload integration are
 superseded by this summary.
 
+## Gameplay detail fix — 2026-10-29
+
+The user reported soft gameplay in the released "The Hatch Behind My Bed" and
+requested a fix only for new videos, preserving everything already made.
+Inspection found landscape 1080p cropped to roughly 608x1080 then enlarged to
+1080x1920; the importer also reduced the available 4K original to landscape
+1080p before cropping. YouTube initially chose Auto (360p) in the inspection
+session, but 1080p processing was complete and playable.
+
+New creator imports now probe the actual original, require native detail for a
+1080x1920 crop, crop before Lanczos downscaling, and prepare portrait H.264 at
+CRF 18. A new `_vertical_v1` filename suffix preserves existing cache files.
+Cache/backup selection skips footage requiring enlargement; 1080p/1440p
+landscape sources no longer qualify for new automatic work. Measured source
+and crop dimensions are recorded alongside the preparation policy. Rights,
+nonoverlap, allowances, captions, final 30fps and publication mode are retained.
+See docs/FOOTAGE_RESEARCH.md for the new admission policy. Existing finished
+videos and their schedules must remain unchanged; this policy is not a reason
+to retire or regenerate them. Inspection evidence is retained under
+storage/reviews/gameplay_resolution_20261029/.
+
+Validation: 232 offline tests, Ruff lint/format and dependency checks passed.
+A five-second preview from the actual local 4K original passed full decode at
+1080x1920/30fps with cached Fish narration and synchronized yellow highlights.
+All 93 baseline file hashes (existing outputs, source media/provenance and
+production settings) and all rows in the five checked queue/usage tables were
+unchanged; SQLite quick_check passed. No live generation, research, upload or
+Telegram delivery was invoked. The installed task reads the updated source on
+its next run; publication settings were preserved.
+
 ## User decisions
 
 - Keep Windows on the Ryzen 5 4600G / integrated graphics / 16 GB PC.
@@ -98,7 +128,7 @@ paths are unchanged. Other Python CLIs use the package commands in docs/DEVELOPM
 Use build_transfer_package.py to include these source trees without credentials
 or environments.
 
-Latest offline validation (2026-10-29): 195 tests, Ruff lint/format checks and pip
+Latest offline validation (2026-10-29): 232 tests, Ruff lint/format checks and pip
 check passed. Earlier offline Fish preview/full decode, Markdown links and SQLite
 integrity checks also passed. Rebuild transfer ZIPs with build_transfer_package.py
 after further source changes.
@@ -263,3 +293,78 @@ out; known secret scanning reads the new folder as well as legacy root locations
 195 offline tests passed, including migrated credential paths, voice selection,
 package boundaries and secret leakage checks. All five PowerShell scripts passed
 syntax parsing. Reboot and interrupted-upload checks remain outstanding.
+
+## Cleaner public descriptions — 2026-10-29
+
+The user requested removing the verbose footage License/Changes lines and the
+sentence explaining that credit is appreciated but optional, from future uploads
+and already scheduled videos. youtube_uploader now filters those public lines
+for creator-permission sources explicitly marked credit_required=false. Simple
+gameplay/creator/source credits remain. Full local sidecars, permission evidence,
+required credits and other license attribution are retained.
+
+The current OAuth grant includes youtube.force-ssl as well as youtube.upload;
+the earlier upload-only read limitation is superseded. All six upcoming scheduled
+videos were updated through snippet-only API requests and read back successfully:
+PthZtrjj27o, hb-mZ1BHL5M, rn9GJJDPqhw, jmDf6PBmBvU, Ce_KINyh7g0 and 4rnclBFY4kk.
+Titles, tags, categories, default text language, publication status and exact
+publishAt values were verified unchanged. The already released orieX-wfe0s was
+outside this scheduled-video cleanup. Backups, accepted update responses and
+readback verification are in ignored deployment/description_cleanup_20261029/.
+No generation, rendering, upload, scheduling or Telegram delivery was performed.
+
+Validation: 224 offline tests passed, including old/new sidecar filtering,
+unchanged local provenance and preserved required/unknown-license attribution.
+
+## Mixed standalone and serial stories — 2026-10-29
+
+The user requested longer horror stories across 3–4 Shorts, with cliffhangers
+encouraging viewers to find the continuation, and selected a mix with standalones.
+secrets/production.json now has story_format=mixed, series_standalones_between=3,
+series_parts=[3,4] and series_min_lead_hours=4. Public scheduling, private-upload
+mode, Telegram, voice files, daily slots, allowance guards and the minimum reserve
+were preserved. Activation waited for the runner lock, used an atomic config
+replacement, and checked SQLite integrity. Its receipt and prior config are in
+ignored deployment/; a verified pre-series database backup is in deployment/backups/.
+The fresh local reserve at activation contained six future scheduled videos.
+Existing scripts, outputs and accepted schedules were not replaced by this feature.
+
+stories/series_story.py drafts a complete arc and continuity bible in one call,
+then edits the full arc in a second call, with the existing bounded JSON repairs
+and no paid fallback. Every nonfinal episode ends on a concrete cliffhanger;
+the next answers it, and the final episode resolves the planted clue and central
+danger. Each part keeps the existing word/duration maximum and has no minimum.
+One explicit narrator/gender/provider is retained through the complete arc.
+Bundles are saved atomically under storage/stories/series/<id>/ with a manifest
+and per-part drafts. Restart reuses the bundle instead of paying for new drafting.
+
+automation/series_queue.py adds story_series and series_episodes tables while
+retaining all render/source claims and history. Mixed production binds only
+untouched queued jobs to consecutive slots; prepared/scheduled jobs stay intact.
+It renders at most one part per configured pass. Every part must be rendered,
+validated and voice-consistent before any part can be approved for publication.
+The complete prepared arc uploads in order, so the scheduled count may temporarily
+exceed four; further generation then stops. Low reserves or an imminent existing
+release prioritize standalone preparation. Failed, needs_attention and uncertain
+members block the arc. A lost upload response can still leave a partial remote
+schedule, requiring explicit inspection/reconciliation; later parts are not skipped.
+
+Series titles are searchable as Part N/3 or N/4 with one common title. The caption
+renderer shows a part badge and a continuation cue over the final two seconds,
+including the existing silent tail, without stretching speech or adding padding.
+The final part has no next-part cue. Caption wording/yellow highlighting, source
+credits and selected voices are retained. Descriptions and Telegram notices include
+part information without claiming the next part is already public.
+Queue status/show expose membership; bulk dry runs preserve state and use no fake IDs.
+
+Validation: all 232 current offline tests passed, including serial continuity,
+restart reuse, per-pass budgets, ordered/uncertain uploads, reserve prioritization,
+voice consistency, metadata/caption labels and unchanged standalone behavior.
+Ruff lint/format and the new CLI help checks passed. An 11.3-second cached-Fish
+caption preview passed full decode, 1080x1920/audio checks and sampled-frame review:
+storage/output/series_caption_preview.mp4; frames in storage/reviews/serial_story_format/.
+This is a label/caption preview, not a newly generated serial story. No live model,
+TTS, source research, upload or Telegram delivery was invoked for this feature's
+tests or activation. The existing worker will prepare new arcs when the reserve
+needs replenishment. The source ZIP predates these latest changes; rebuild it with
+build_transfer_package.py before transferring source.

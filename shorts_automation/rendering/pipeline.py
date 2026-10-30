@@ -111,7 +111,10 @@ def run_pipeline(
 
         # 4. SUBTITLE STREAM GENERATION
         print("\n[STEP 4/5] Building synchronized word-highlight captions...")
-        subtitles_concat = generate_subtitles_stream(sentence_blocks, total_audio_duration=duration)
+        caption_options = {"series": story["series"]} if "series" in story else {}
+        subtitles_concat = generate_subtitles_stream(
+            sentence_blocks, total_audio_duration=duration, **caption_options
+        )
 
         # 5. FINAL VIDEO ASSEMBLY
         print("\n[STEP 5/5] Compiling final vertical video...")

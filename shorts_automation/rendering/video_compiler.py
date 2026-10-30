@@ -2,7 +2,8 @@ import os
 import subprocess
 from pathlib import Path
 
-from config import FPS, NARRATION_TAIL_SECONDS, OUTPUT_DIR, VIDEO_HEIGHT, VIDEO_WIDTH
+from config import FPS, NARRATION_TAIL_SECONDS, OUTPUT_DIR
+from shorts_automation.footage.video_quality import VERTICAL_FILTER
 
 RENDER_TIMEOUT_SECONDS = 900  # A stuck FFmpeg must not block a 24/7 queue forever.
 
@@ -38,7 +39,7 @@ def compile_short(
 ) -> Path:
     """
     Renders the final vertical YouTube Short:
-    - Scales any source aspect ratio to cover 1080x1920, then center-crops
+    - Center-crops native pixels, then scales to 1080x1920 with Lanczos
     - Overlays synchronized subtitle cards
     - Mixes narration with background gameplay audio (ducked to 6%)
     - Writes to a temporary file and publishes it atomically, so the final
@@ -52,13 +53,9 @@ def compile_short(
 
     gameplay_has_audio = has_audio_stream(gameplay_path)
 
-    # Cover-scale keeps the aspect ratio and guarantees both dimensions reach the
-    # frame, so crop never fails on sources narrower than 9:16 (or wider than 16:9).
-    video_chain = (
-        f"[0:v]scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
-        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},setsar=1[bg];"
-        f"[bg][1:v]overlay=0:0[outv]"
-    )
+    # Creator imports already have native-detail portrait frames. Use the same
+    # crop-first path for direct originals and manual evaluation clips.
+    video_chain = f"[0:v]{VERTICAL_FILTER}[bg];[bg][1:v]overlay=0:0[outv]"
 
     # Complex Filter Construction
     if gameplay_has_audio:

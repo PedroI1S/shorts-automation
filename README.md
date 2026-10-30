@@ -3,6 +3,11 @@
 Original English horror stories, creator-provided Minecraft parkour footage,
 Fish/ElevenLabs narration, synchronized word highlighting, and local FFmpeg renders.
 
+Stories now mix standalone Shorts with connected 3–4-part horror arcs. Early parts
+end on concrete cliffhangers, with numbered titles and on-screen continuation cues;
+the final part delivers the payoff. Three standalones separate arcs, and each part
+uses a normal publishing slot. See [story formats](docs/STORY_WORKFLOW.md).
+
 **Current configuration:** the installed Windows worker has public scheduling
 and Telegram notifications enabled. It maintains a minimum of three confirmed
 future public releases and refills toward four. Publishing targets are 07:00,
@@ -36,6 +41,7 @@ No paid fallback, purchase or subscription upgrade is authorized.
 | Root `config.py`, `build_transfer_package.py` | Stable path configuration and source-transfer builder |
 | `secrets/` | Local credentials and JSON configuration; production settings live here too |
 | `scripts/windows/` | Windows environment setup |
+| `branding/` | Channel logo, banner, generated source artwork and design prompts |
 | `tests/` | Offline regression tests and shared fakes |
 | `legacy/` | Retained batch, Reddit/model fallback and Commons replenishment code; explicit evaluation only |
 | `docs/` | Current operating and development guides |

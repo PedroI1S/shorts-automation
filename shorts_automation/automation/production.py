@@ -29,6 +29,7 @@ from config import (
     STORAGE_DIR,
     TEMP_DIR,
 )
+from shorts_automation.automation import series_queue
 from shorts_automation.automation.orchestrator import (
     JobQueue,
     RunnerBusy,
@@ -73,8 +74,23 @@ def load_config(path=CONFIG_PATH):
     if config["publish_enabled"] and config["private_upload_enabled"]:
         raise ValueError("Choose public scheduling or private-only uploads, never both.")
     config.setdefault("minimum_scheduled_videos", 3)
+    config.setdefault("story_format", "standalone")
+    config.setdefault("series_standalones_between", 3)
+    config.setdefault("series_min_lead_hours", 4)
+    config.setdefault("series_parts", [3, 4])
+    if config["story_format"] not in ("standalone", "mixed"):
+        raise ValueError("Choose standalone or mixed story format.")
+    if (
+        not isinstance(config["series_parts"], list)
+        or not config["series_parts"]
+        or any(type(n) is not int or n not in (3, 4) for n in config["series_parts"])
+        or len(set(config["series_parts"])) != len(config["series_parts"])
+    ):
+        raise ValueError("series_parts must contain 3, 4, or both without duplicates.")
     for name, low, high in (
         ("minimum_scheduled_videos", 1, 12),
+        ("series_standalones_between", 1, 12),
+        ("series_min_lead_hours", 2, 24),
         ("lookahead_hours", 1, 72),
         ("max_jobs_per_pass", 1, 3),
         ("min_free_disk_gb", 1, 100),
@@ -248,6 +264,70 @@ def owned_jobs(queue):
             "SELECT q.*, p.publish_at FROM production_slots p JOIN queue_jobs q ON q.id=p.job_id "
             "ORDER BY p.publish_at"
         ).fetchall()
+
+
+def assign_series(queue, config, now):
+    """Mix one coherent arc into untouched consecutive slots after standalone releases."""
+    if config.get("story_format") != "mixed" or not config["publish_enabled"]:
+        return None
+    buffer = scheduled_buffer(queue, config, now)
+    if buffer:
+        if buffer["future_scheduled"] < buffer["minimum"]:
+            return None
+        if buffer["next_release"] and datetime.fromisoformat(
+            buffer["next_release"]
+        ) < now + timedelta(hours=config.get("series_min_lead_hours", 4)):
+            return None
+    rows = owned_jobs(queue)
+    candidates = [
+        row
+        for row in rows
+        if row["stage"] in ("queued", "drafted") and series_queue.can_process(queue, row["id"])
+    ]
+    if not candidates:
+        return None
+    first = candidates[0]
+    existing = series_queue.info(queue, first["id"])
+    if existing:
+        return existing["id"]
+    if first["stage"] != "queued" or first["story_path"]:
+        return None
+    first_instant = datetime.fromisoformat(first["publish_at"].replace("Z", "+00:00"))
+    if first_instant < now + timedelta(hours=config.get("series_min_lead_hours", 4)):
+        return None
+    standalones = 0
+    for previous in reversed([row for row in rows if row["publish_at"] < first["publish_at"]]):
+        if series_queue.info(queue, previous["id"]):
+            break
+        if previous["stage"] in ("scheduled", "rendered", "approved", "uploaded_private"):
+            standalones += 1
+    if standalones < config.get("series_standalones_between", 3):
+        return None
+    with queue.connect() as db:
+        count = db.execute("SELECT COUNT(*) FROM story_series").fetchone()[0]
+    lengths = config.get("series_parts", [3, 4])
+    preferred = lengths[count % len(lengths)]
+    slots = list(future_slots(config, now))
+    if first["publish_at"] not in slots:
+        return None
+    start = slots.index(first["publish_at"])
+    by_slot = {row["publish_at"]: row for row in rows}
+    for total in dict.fromkeys((preferred, *lengths)):
+        window = slots[start : start + total]
+        if len(window) != total:
+            continue
+        jobs = [by_slot.get(slot) for slot in window]
+        if any(
+            not job
+            or job["stage"] != "queued"
+            or job["story_path"]
+            or job["tts_provider"] != first["tts_provider"]
+            or series_queue.info(queue, job["id"])
+            for job in jobs
+        ):
+            continue
+        return series_queue.link(queue, [job["id"] for job in jobs])
+    return None
 
 
 def current_footage_format(job):
@@ -520,6 +600,7 @@ def cycle(
     lock_path=None,
     health_path=HEALTH_PATH,
     notification_sender=None,
+    series_drafter=None,
 ):
     supplied_now = now
 
@@ -557,14 +638,81 @@ def cycle(
     youtube = None
     upload_attempted = set()
 
+    def advance_series(series):
+        nonlocal youtube
+        rows = series_queue.members(queue, series["id"])
+        pending = [row for row in rows if row["stage"] in ("rendered", "approved")]
+        if not pending or any(
+            row["stage"] not in ("rendered", "approved", "scheduled", "uploaded_private")
+            for row in rows
+        ):
+            return
+        if any(row["id"] in upload_attempted for row in pending):
+            return
+        buffer = scheduled_buffer(queue, config, clock())
+        started = any(row["youtube_id"] for row in rows)
+        if buffer and buffer["future_scheduled"] >= buffer["target"] and not started:
+            return
+        try:
+            series_queue.validate_outputs(series, rows)
+            for row in pending:
+                validator(row, set(config["background_licenses"]))
+                if config.get("footage_discovery") == "creator_downloads" and not (
+                    current_footage_format(row) and current_story_format(row, config)
+                ):
+                    raise ValueError("Outdated series format")
+        except Exception:
+            row = pending[0]
+            queue.move(
+                row["id"],
+                (row["stage"],),
+                "needs_attention",
+                "Complete series media/continuity/voice validation failed",
+                error="Inspect the full arc before publication.",
+            )
+            health["problems"].append(series["id"][:8] + ": series validation failed")
+            return
+        if not uploads_enabled:
+            return
+        for row in pending:
+            if row["stage"] == "rendered":
+                queue.review(row["id"], "approved", "Complete series media and voice checks passed")
+        # Finish this prepared arc even if its uploads temporarily exceed the
+        # four-video target. Do not spend on another arc while the reserve is full.
+        for row in pending:
+            assigned = next(
+                job["publish_at"] for job in owned_jobs(queue) if job["id"] == row["id"]
+            )
+            private_only = config.get("private_upload_enabled", False)
+            if private_only and datetime.fromisoformat(assigned.replace("Z", "+00:00")) > clock():
+                return
+            upload_attempted.add(row["id"])
+            try:
+                youtube = youtube or service_factory()
+                options = {"private_only": True} if private_only else {"publish_at": assigned}
+                uploaded = queue.schedule_job(row["id"], youtube, **options)
+                health["published"].append(uploaded["id"][:8])
+            except Exception as error:
+                health["problems"].append(
+                    series["id"][:8] + ": series upload stopped (" + type(error).__name__ + ")"
+                )
+                return
+
     def advance_ready():
         nonlocal youtube
+        visited_series = set()
         for job in owned_jobs(queue):
             if job["stage"] not in ("rendered", "approved") or job["id"] in upload_attempted:
                 continue
+            series = series_queue.info(queue, job["id"])
+            if series:
+                if series["id"] not in visited_series:
+                    advance_series(series)
+                    visited_series.add(series["id"])
+                continue
             buffer = scheduled_buffer(queue, config, clock())
             if buffer and buffer["future_scheduled"] >= buffer["target"]:
-                return
+                continue
             if (
                 config.get("footage_discovery") == "creator_downloads"
                 and job["stage"] == "approved"
@@ -692,6 +840,10 @@ def cycle(
             advance_ready()
             buffer = scheduled_buffer(queue, config, clock())
             needs_generation = not buffer or buffer["future_scheduled"] < buffer["target"]
+            if needs_generation:
+                assigned_series = assign_series(queue, config, clock())
+                if assigned_series:
+                    health["series_preparation"] = assigned_series[:8]
             if not needs_generation:
                 health["preparation"] = "scheduled reserve full; generation and research skipped"
             if (
@@ -718,7 +870,12 @@ def cycle(
                     drafter,
                     renderer,
                     exclude=processed,
-                    include=[identity for identity in include if identity not in processed][:1],
+                    include=[
+                        identity
+                        for identity in include
+                        if identity not in processed and series_queue.can_process(queue, identity)
+                    ][:1],
+                    series_drafter=series_drafter,
                 )
                 if job is None:
                     break

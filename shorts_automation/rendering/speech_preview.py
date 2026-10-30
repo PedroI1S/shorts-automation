@@ -26,7 +26,22 @@ def main():
         help="Reuse saved narration and timestamps without API calls.",
     )
     parser.add_argument("--output-name", help="Optional MP4 filename in storage/output.")
+    parser.add_argument(
+        "--series-part", type=int, help="Preview a series label without drafting a story."
+    )
+    parser.add_argument("--series-total", type=int, choices=(3, 4), default=3)
     args = parser.parse_args()
+    series = None
+    if args.series_part is not None:
+        if not 1 <= args.series_part <= args.series_total:
+            parser.error("--series-part must be within the series.")
+        series = {
+            "id": "0" * 32,
+            "title": "Serial Caption Preview On Channel",
+            "part": args.series_part,
+            "total": args.series_total,
+            "ending": "finale" if args.series_part == args.series_total else "cliffhanger",
+        }
     if len(args.text) > 1200:
         parser.error("Preview limited to 1,200 characters to conserve free quota.")
     if args.audio_metadata:
@@ -40,7 +55,7 @@ def main():
         args.provider = metadata["provider"]
     else:
         audio, duration, words = generate_speech(args.text, args.voice, args.provider)
-    captions = generate_subtitles_stream(words, duration)
+    captions = generate_subtitles_stream(words, duration, **({"series": series} if series else {}))
     if args.output_name and (
         Path(args.output_name).name != args.output_name or not args.output_name.endswith(".mp4")
     ):

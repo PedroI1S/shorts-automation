@@ -28,6 +28,13 @@ Fish and accepts `--gameplay` or `--background-file`. Drafting/rendering consume
 allowances; the offline preview does not. `run` never uploads. Removing `--dry-run`
 from a scheduling command uploads and schedules actual publication.
 
+Automatic mixed-format jobs can belong to a 3/4-part series. `status` labels part
+numbers; `show` includes the manifest and every member job. A blocked member stops
+the entire arc. Scheduling requires every part rendered and approved, with earlier
+parts confirmed at earlier release times. `schedule-approved --dry-run` supports
+ordered series previews without reserving slots or inventing IDs. Do not use the
+legacy direct uploader to bypass these checks; see [story formats](STORY_WORKFLOW.md).
+
 ## Production and recovery
 
 `queued -> drafting -> drafted -> rendering -> rendered -> approved | rejected`

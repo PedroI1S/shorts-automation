@@ -71,6 +71,9 @@ def flush_notifications(queue, sender=None):
                 Path(job["output"]).with_suffix(".metadata.json").read_text(encoding="utf-8")
             )
             title = metadata["story"]["title"]
+            if metadata["story"].get("series"):
+                series = metadata["story"]["series"]
+                title = f"{series['title']} — Part {series['part']}/{series['total']}"
         except (OSError, ValueError, KeyError):
             pass
         label = (

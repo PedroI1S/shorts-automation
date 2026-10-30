@@ -15,6 +15,7 @@ from shorts_automation.publishing.youtube_uploader import (
     get_authenticated_service,
     get_next_publishing_slot,
     normalize_publish_time,
+    public_attribution,
     upload_video,
 )
 
@@ -208,6 +209,55 @@ class YouTubeSchedulingTests(unittest.TestCase):
                 else:
                     credits.write_text(existing, encoding="utf-8")
                 self.assertEqual(build_short_metadata(video)["description"].count(credit), 1)
+
+    def test_optional_creator_provenance_stays_local_for_old_and_new_renders(self):
+        note = (
+            "A credit or link back to the channel is appreciated but not required, "
+            "according to the creator description."
+        )
+        for license_name in ("User-authorized creator footage", "Creator commercial permission"):
+            for sidecar_note in ("", note + "\n"):
+                with self.subTest(license=license_name, sidecar_note=sidecar_note):
+                    video = self.root / "optional-credit.mp4"
+                    source = {
+                        "license": license_name,
+                        "credit_required": False,
+                        "credit_text": note,
+                    }
+                    video.with_suffix(".metadata.json").write_text(
+                        json.dumps({"background_source": source}), encoding="utf-8"
+                    )
+                    credits = (
+                        "Gameplay: Minecraft Parkour\nCreator: Spawn Point\n"
+                        "Source: https://example.org/creator\n"
+                        f"License: {license_name} https://example.org/permission\n"
+                        "Changes: Extracted 60 seconds; cropped to vertical and captioned.\n"
+                        + sidecar_note
+                        + "Local evaluation. Listed license metadata is not publication clearance.\n"
+                    )
+                    sidecar = video.with_suffix(".credits.txt")
+                    sidecar.write_text(credits, encoding="utf-8")
+                    description = build_short_metadata(video)["description"]
+                    self.assertIn("Creator: Spawn Point", description)
+                    self.assertIn("Source: https://example.org/creator", description)
+                    self.assertNotIn("License:", description)
+                    self.assertNotIn("Changes:", description)
+                    self.assertNotIn(note, description)
+                    self.assertNotIn("Local evaluation.", description)
+                    self.assertEqual(sidecar.read_text(encoding="utf-8"), credits)
+                    sidecar.unlink()
+                    self.assertNotIn(note, build_short_metadata(video)["description"])
+
+    def test_required_or_unknown_license_attribution_is_preserved(self):
+        credits = "Creator: Alice\nLicense: CC BY 4.0\nChanges: Cropped and captioned."
+        for source in (
+            {},
+            {"license": "CC BY 4.0", "credit_required": False},
+            {"license": "Creator commercial permission", "credit_required": True},
+            {"license": "Creator commercial permission"},
+        ):
+            with self.subTest(source=source):
+                self.assertEqual(public_attribution(credits, source), credits)
 
     def test_manual_upload_cannot_take_planned_production_slot(self):
         from shorts_automation.automation import production

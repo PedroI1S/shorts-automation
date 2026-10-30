@@ -23,6 +23,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from config import SPEECH_WORDS_PER_SECOND, STORAGE_DIR
+from shorts_automation.automation import series_queue
 from shorts_automation.state.usage_store import DB_PATH, AlreadyUsed, UsageStore
 from shorts_automation.stories.draft_story import validate_story
 
@@ -98,6 +99,7 @@ class JobQueue:
                     pass
             if "upload_mode" not in {r[1] for r in db.execute("PRAGMA table_info(queue_jobs)")}:
                 db.execute("ALTER TABLE queue_jobs ADD COLUMN upload_mode TEXT")
+            db.executescript(series_queue.SCHEMA)
 
     @contextmanager
     def connect(self):
@@ -266,7 +268,13 @@ class JobQueue:
         return booked
 
     def schedule_job(
-        self, ref, youtube_service=None, dry_run=False, publish_at=None, private_only=False
+        self,
+        ref,
+        youtube_service=None,
+        dry_run=False,
+        publish_at=None,
+        private_only=False,
+        preview_series_slots=None,
     ):
         """Reserve a job and slot before any network call; never auto-repeat an uncertain upload."""
         from shorts_automation.publishing.youtube_uploader import (
@@ -311,6 +319,9 @@ class JobQueue:
                     raise ValueError("This publishing slot is already reserved.")
             else:
                 utc_iso = get_next_publishing_slot(existing_scheduled=booked)["utc_iso"]
+            series_queue.guard_schedule(
+                db, job["id"], utc_iso, private_only, preview_series_slots if dry_run else None
+            )
             if not dry_run:
                 db.execute(
                     "UPDATE queue_jobs SET stage='uploading', scheduled_at=?, upload_mode=?, updated_at=?, error=NULL WHERE id=?",
@@ -475,8 +486,12 @@ def runner_lock(path=LOCK_PATH):
 
 
 # ---- runner --------------------------------------------------------------
-def _draft(queue, job, drafter):
+def _draft(queue, job, drafter, series_drafter=None):
     try:
+        if series_queue.info(queue, job["id"]):
+            if series_drafter is None:
+                from shorts_automation.stories.series_story import draft_series as series_drafter
+            return series_queue.draft_job(queue, job, series_drafter)
         path = drafter(job["topic"])
         _read_story(path)  # Never advance an unreadable or out-of-range draft.
     except Exception as error:
@@ -494,11 +509,29 @@ def _draft(queue, job, drafter):
 def _render(queue, job, renderer, usage):
     from shorts_automation.rendering.pipeline import NarrationTooLong
 
+    serial = series_queue.info(queue, job["id"])
     try:
         story = _read_story(job["story_path"])
+        series_queue.check_story(queue, job, story)
     except (OSError, ValueError, TypeError) as error:
+        if serial:
+            return queue.move(
+                job["id"],
+                ("rendering",),
+                "needs_attention",
+                "Inspect the complete series draft",
+                error=_summary(error),
+            )
         return queue.fail_attempt(job, "queued", error, clear_story=True)
     if usage.story_owner(story["script"]):
+        if serial:
+            return queue.move(
+                job["id"],
+                ("rendering",),
+                "needs_attention",
+                "Series draft duplicates used narration",
+                error="Inspect the full arc; no independent episode redraft performed.",
+            )
         # Checked before any TTS call: an identical story would be blocked anyway.
         return queue.fail_attempt(
             job, "queued", AlreadyUsed("Draft duplicates an existing story."), clear_story=True
@@ -514,6 +547,14 @@ def _render(queue, job, renderer, usage):
             )
         )
     except NarrationTooLong as error:
+        if serial:
+            return queue.move(
+                job["id"],
+                ("rendering",),
+                "needs_attention",
+                "Shorten the complete series draft consistently",
+                error=_summary(error),
+            )
         return queue.fail_attempt(job, "queued", error, clear_story=True)
     except Exception as error:
         return queue.fail_attempt(job, "drafted", error)
@@ -532,13 +573,16 @@ def _render(queue, job, renderer, usage):
     )
 
 
-def process_one(queue, usage, drafter, renderer, exclude=(), include=None):
+def process_one(queue, usage, drafter, renderer, exclude=(), include=None, series_drafter=None):
     """Advance the oldest actionable job as far as it can go. Returns its final row or None."""
+    if include is None:
+        include = [row["id"] for row in queue.list() if row["stage"] in ("queued", "drafted")]
+    include = [identity for identity in include if series_queue.can_process(queue, identity)]
     job = queue.claim_next(exclude, include)
     if job is None:
         return None
     if job["stage"] == "drafting":
-        job = _draft(queue, job, drafter)
+        job = _draft(queue, job, drafter, series_drafter)
         if job["stage"] != "drafted":
             return job
         job = queue.move(job["id"], ("drafted",), "rendering", "continuing to render")
@@ -564,15 +608,16 @@ def run(max_jobs=1, queue=None, usage=None, drafter=None, renderer=None, lock_pa
 
 
 # ---- CLI -----------------------------------------------------------------
-def _line(job):
+def _line(job, series=None):
     job = dict(job)
     note = job["error"] or job["review_note"] or ""
     if job.get("youtube_id"):
         note = f"YouTube: {job['youtube_id']}"
     sched = f" [{job['scheduled_at'][:16]}]" if job.get("scheduled_at") else ""
+    label = f" [Part {series['part']}/{series['part_count']}]" if series else ""
     return (
         f"{job['id'][:8]}  {job['stage']:<15} {job['attempts']}/{MAX_ATTEMPTS}  "
-        f"{job['tts_provider']:<10} {job['topic'][:35]:<35}  {note[:45]}{sched}"
+        f"{job['tts_provider']:<10} {job['topic'][:35]:<35}  {note[:45]}{sched}{label}"
     )
 
 
@@ -669,11 +714,19 @@ def main(argv=None):
             )
         elif args.command == "status":
             for job in queue.list(args.stage):
-                print(_line(job))
+                print(_line(job, series_queue.info(queue, job["id"])))
         elif args.command == "show":
             job = queue.get(args.job)
             for key in job.keys():
                 print(f"{key:>15}: {job[key]}")
+            series = series_queue.info(queue, job["id"])
+            if series:
+                print(
+                    f"{'series':>15}: {series['id']} — Part {series['part']}/{series['part_count']}"
+                )
+                print(f"{'series_manifest':>15}: {series['manifest_path'] or 'not drafted'}")
+                for part in series_queue.members(queue, series["id"]):
+                    print(f"  Part {part['series_part']}: {part['id'][:8]} {part['stage']}")
             print("\nHistory:")
             for event in queue.events(job["id"]):
                 print(f"  {event['at']}  {event['stage']:<15} {event['detail'] or ''}")
@@ -705,6 +758,7 @@ def main(argv=None):
                 return 0
             yt = None if args.dry_run else get_authenticated_service(interactive=False)
             preview_slots = []
+            preview_series_slots = {}
             for row in approved:
                 publish_at = None
                 if args.dry_run:
@@ -719,8 +773,14 @@ def main(argv=None):
                     )["utc_iso"]
                     preview_slots.append(publish_at)
                 job = queue.schedule_job(
-                    row["id"], youtube_service=yt, dry_run=args.dry_run, publish_at=publish_at
+                    row["id"],
+                    youtube_service=yt,
+                    dry_run=args.dry_run,
+                    publish_at=publish_at,
+                    preview_series_slots=preview_series_slots,
                 )
+                if args.dry_run:
+                    preview_series_slots[row["id"]] = job["preview_publish_at"]
                 print(_line(job))
         elif args.command == "reconcile-upload":
             print(

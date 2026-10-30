@@ -3,6 +3,24 @@
 SQLite lives at storage/usage.sqlite3, outside the transfer ZIP. Preserve it
 privately when moving PCs; deleting media must not silently release usage history.
 
+## Series reservations
+
+The queue adds story_series and series_episodes tables without changing render
+usage claims or existing queue history. A series has one stable ID, premise,
+provider, 3/4-part count and saved manifest. Episode membership and consecutive
+production slots survive restart. Untouched queued jobs are bound in one
+transaction, with their original premises retained in events; drafted/rendered
+jobs and accepted uploads are not converted. The complete draft is admitted to
+all member jobs in one transaction before narration.
+
+Every part keeps its own render/story/source claim and disjoint footage interval.
+All outputs must match the admitted bundle and share the same actual voice before
+publication. Queue reservations enforce Part 1 before Part 2 and increasing release
+times. A failed, needs_attention or uncertain member blocks the arc. Never delete
+these relations to bypass an uncertain upload or regenerate an already used part.
+Use explicit channel reconciliation and inspect the whole bundle when repairing it.
+A verified pre-series SQLite backup is retained in ignored deployment/backups/.
+
 ## Claims and source segments
 
 A normalized story fingerprint is reserved before TTS. Supplied creator footage

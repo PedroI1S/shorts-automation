@@ -50,6 +50,33 @@ The production config now selects `creator_downloads`. It uses unused eligible
 creator cache first; otherwise it invokes the complete research/import flow.
 Sourcing errors retain the saved story and do not consume new TTS quota.
 
+## Native detail for new videos
+
+From the 2026-10-29 quality fix, creator imports probe the actual downloaded
+file or local original and require at least 1080x1920 native pixels remaining
+after a center crop. A 3840x2160 landscape original qualifies; 1920x1080 and
+2560x1440 landscape originals do not. Source dimensions advertised in a YouTube
+title are insufficient. Failed quality admission happens before TTS.
+
+Both import paths crop the original pixels first, then use Lanczos to reduce
+to 1080x1920, encoding at CRF 18. This preserves 4K detail without retaining a
+large 4K landscape intermediate. Preparation metadata records measured original
+and crop dimensions and `preparation_policy=native-vertical-crop-v1`.
+New files use a `_vertical_v1.mp4` suffix; existing cache/media is preserved.
+
+Cache selection and backup checks skip clips whose actual dimensions would
+require vertical enlargement. Source intervals, hashes, history and rights
+checks remain enforced. Low-resolution known recordings can no longer supply
+new automatic videos; the importer must find a qualifying free original.
+Manual evaluation rendering retains support for small fixtures, with the same
+crop-first filter. Final output remains 1080x1920 at 30fps with synchronized
+yellow word highlighting.
+
+The user requested leaving all already-made videos unchanged. Existing renders,
+receipts and schedules are not regenerated or invalidated by this admission
+policy. The earlier GameplayHUB import below is retained as historical evidence;
+its landscape 1080p recording no longer qualifies for new automatic work.
+
 ## Verified live result
 
 Successful AGY catalog: storage/reviews/agy_creator_sources_980cbb42fb/sources.json.

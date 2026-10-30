@@ -136,6 +136,31 @@ def get_next_publishing_slot(
     raise RuntimeError("Could not find an available scheduling slot within the next 60 days.")
 
 
+def public_attribution(credits_text, source):
+    """Keep optional creator provenance details in local sidecars, not descriptions."""
+    optional_creator = (
+        source.get("license")
+        in {
+            "Creator commercial permission",
+            "User-authorized creator footage",
+        }
+        and source.get("credit_required") is False
+    )
+    optional_credit_note = (
+        "A credit or link back to the channel is appreciated but not required, "
+        "according to the creator description."
+    )
+    return "\n".join(
+        line
+        for line in credits_text.splitlines()
+        if not line.startswith("Local evaluation.")
+        and not (
+            optional_creator
+            and (line.startswith(("License:", "Changes:")) or line.strip() == optional_credit_note)
+        )
+    ).strip()
+
+
 def build_short_metadata(video_path: Path):
     """Extracts title, description, tags, and license credits from video and sidecars."""
     video_path = Path(video_path)
@@ -143,7 +168,9 @@ def build_short_metadata(video_path: Path):
     credits_path = video_path.with_suffix(".credits.txt")
 
     title = "Story Time #shorts"
+    background_source = {}
     creator_credit = ""
+    series = None
     description_lines = []
     tags = ["shorts", "story", "thriller", "horror", "storytime", "mystery"]
 
@@ -151,7 +178,9 @@ def build_short_metadata(video_path: Path):
         try:
             data = json.loads(meta_path.read_text(encoding="utf-8"))
             story = data.get("story", {})
-            creator_credit = (data.get("background_source", {}).get("credit_text") or "").strip()
+            series = story.get("series")
+            background_source = data.get("background_source", {})
+            creator_credit = (background_source.get("credit_text") or "").strip()
             if story.get("title"):
                 title = f"{story['title']} #shorts #story"
             if story.get("script"):
@@ -159,22 +188,39 @@ def build_short_metadata(video_path: Path):
         except (OSError, ValueError):
             pass
 
+    if series is not None:
+        from shorts_automation.stories.draft_story import validate_series_info
+
+        series = validate_series_info(series)
+        title = f"Part {series['part']}/{series['total']}: {series['title']} #shorts"
+        description_lines.insert(
+            0, f"{series['title']} — Part {series['part']} of {series['total']}\n"
+        )
+        if series["part"] < series["total"]:
+            description_lines.append(
+                f"Next: Part {series['part'] + 1} of {series['title']} on this channel.\n"
+            )
+        else:
+            description_lines.append("The final part of this story.\n")
+        if series["part"] > 1:
+            description_lines.append(
+                f"Start with Part 1/{series['total']} of {series['title']} on this channel.\n"
+            )
+        tags.append("horrorseries")
+
     description_lines.append("#shorts #storytime #mystery #ruleshorror #thriller\n")
     description_lines.append("Original fictional story with AI-generated narration.\n")
 
     credits_text = ""
     if credits_path.is_file():
         try:
-            credits_text = "\n".join(
-                line
-                for line in credits_path.read_text(encoding="utf-8").splitlines()
-                if not line.startswith("Local evaluation.")
-            ).strip()
+            credits_text = credits_path.read_text(encoding="utf-8").strip()
         except OSError:
             pass
     # Older renders can have source credit instructions only in their metadata.
     if creator_credit and creator_credit not in credits_text:
         credits_text = "\n".join(filter(None, (credits_text, creator_credit)))
+    credits_text = public_attribution(credits_text, background_source)
     if credits_text:
         description_lines.append(f"--- Attribution ---\n{credits_text}")
 

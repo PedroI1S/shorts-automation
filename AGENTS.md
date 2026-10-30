@@ -33,6 +33,11 @@ Use current guides in docs/; docs/history/ preserves superseded session notes.
   or private previews. Keep allowance, source, quality and upload-uncertainty guards.
 - Shorts have no minimum duration or word count. Prioritize story quality and a
   complete payoff without padding; retain the current maximum duration guard.
+- Mix standalones with coherent 3/4-part arcs. Early episodes need concrete
+  cliffhangers; the final episode pays off the main threat. Preserve one narrator
+  and voice, numbering and ordered release. Prepare/validate the whole arc before
+  scheduling Part 1; never skip an uncertain or failed continuation. A prepared
+  arc may briefly exceed the four-video reserve target when uploaded together.
 - The user explicitly enabled public scheduling on 2026-10-29, with Telegram
   notifications. Preserve the publication mode during maintenance and setup;
   only an explicit user instruction authorizes changing it.

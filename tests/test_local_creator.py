@@ -40,6 +40,8 @@ class LocalCreatorTests(unittest.TestCase):
             }
             original.with_suffix(".source.json").write_text(json.dumps(provenance), encoding="utf8")
             store = UsageStore(root / "usage.db")
+            old_clip = root / "creator_Io2-_UUlUOg_000005000_000065000.mp4"
+            old_clip.write_bytes(b"preserve old footage")
 
             def render(command, **kwargs):
                 Path(command[-1]).write_bytes(
@@ -51,7 +53,17 @@ class LocalCreatorTests(unittest.TestCase):
                 patch.object(f, "BACKGROUNDS_DIR", root),
                 patch.object(f, "UsageStore", return_value=store),
                 patch.object(f, "get_video_duration", return_value=60),
-                patch.object(f.subprocess, "run", side_effect=render),
+                patch.object(
+                    f,
+                    "require_vertical_detail",
+                    return_value={
+                        "source_width": 3840,
+                        "source_height": 2160,
+                        "vertical_crop_width": 1214,
+                        "vertical_crop_height": 2160,
+                    },
+                ),
+                patch.object(f.subprocess, "run", side_effect=render) as encoder,
             ):
                 first = f.import_local_creator_clip(original, {f.LOCAL_LICENSE})
                 meta = json.loads(first.with_suffix(".source.json").read_text(encoding="utf8"))
@@ -59,6 +71,12 @@ class LocalCreatorTests(unittest.TestCase):
                 self.assertEqual(meta["license"], f.LOCAL_LICENSE)
                 self.assertTrue(meta["user_authorized_monetized_reels"])
                 self.assertFalse(meta["publication_cleared"])
+                self.assertEqual(meta["preparation_policy"], f.PREPARATION_POLICY)
+                self.assertEqual(meta["source_height"], 2160)
+                self.assertTrue(first.name.endswith("_vertical_v1.mp4"))
+                self.assertEqual(old_clip.read_bytes(), b"preserve old footage")
+                command = encoder.call_args.args[0]
+                self.assertEqual(command[command.index("-vf") + 1], f.VERTICAL_FILTER)
                 job = store.begin("one")
                 store.reserve_source(job, meta, first)
                 second = f.import_local_creator_clip(original, {f.LOCAL_LICENSE})

@@ -25,8 +25,13 @@ or clearly lit scenery; attractive maps, colors and shaders; clean footage that
 works behind spoken stories. The story can be scary while the gameplay remains
 clear and engaging. Darkness and caves are NOT a requirement.
 
-Aim for native 1080p or better (1440p/4K preferred), native 60 fps preferred,
-at least 5 minutes of usable continuous recording, ideally 15-60 minutes.
+Require enough native pixels for a 1080x1920 center crop without enlargement:
+normally 3840x2160 (4K) or better for landscape, or native 1080x1920 for portrait.
+Landscape 1080p and 1440p cannot supply this detail after the vertical crop and
+belong in `blocked` with a resolution explanation. Verify the creator's actual
+download where possible; a 4K YouTube title or stream does not prove the linked
+file is 4K. Native 60 fps is preferred, with at least 5 minutes of usable
+continuous recording, ideally 15-60 minutes.
 Landscape originals are fine if the central 9:16 crop retains the next landing
 platform and the player's forward path. Prefer no HUD, facecam, watermarks,
 captions, debug text, recording notifications, commentary, rapid cuts or menus.

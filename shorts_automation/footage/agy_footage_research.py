@@ -230,7 +230,9 @@ def research(
         "You are the query planner in a bounded public-video research pipeline. No tools are available "
         'or needed. Do not call RunCommand or any tools. Return ONLY JSON: {"searches":[three strings]}. '
         "Find actual Minecraft parkour creator videos, similar to YouTube u7kdVe8q5zs, with "
-        "download links in descriptions and free reuse permission. Prefer long 1080p/60fps recordings. "
+        "download links in descriptions and free reuse permission. Find long native 4K (3840x2160) "
+        "landscape or native 1080x1920 portrait recordings, preferably 60fps. Landscape 1080p and "
+        "1440p lose too much detail when cropped vertically. Target the creator's full-resolution file. "
         "At least one query must target free MediaFire downloads, one Google Drive links, and one "
         "long no-copyright recordings. Do not restrict search to Commons. Queries max 200 characters. "
         "A Python coordinator will execute these searches, not you."
