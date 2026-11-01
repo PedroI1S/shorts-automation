@@ -22,6 +22,10 @@ from config import (
 )
 from shorts_automation.stories.draft_story import (
     CHAT_REVISION,
+    DRAFT_MODEL,
+    DRAFT_REASONING,
+    REVIEW_MODEL,
+    REVIEW_REASONING,
     opening_problem,
     query_hermes,
     validate_contacts,
@@ -29,6 +33,53 @@ from shorts_automation.stories.draft_story import (
 )
 
 FORMATS = ("narrated", "chat")
+# A strict reviewer always finds something new, so keep the best-scoring version
+# instead of demanding a perfect pass. One revision keeps slow Sol calls in budget.
+REVISION_ROUNDS = 1
+GOOD_SCORE = 8  # stop revising
+ACCEPT_SCORE = 7  # lowest score that may be scheduled
+
+NARRATED_REVIEW = """
+You are a strict story reviewer for a first-person horror Shorts arc heard once, aloud.
+Do not rewrite. List every concrete problem against this checklist:
+1. Part 1's first sentence is the most disturbing concrete event, with no warm-up.
+2. Each later part answers the previous cliffhanger within its first two sentences.
+3. The threat's rule is worded the same way every time and is never broken: what it
+   can pass, cross, copy or touch stays fixed (for example "invite me out" must not
+   become "invite me in"; "objects only" must not allow a hand).
+4. Every mystery raised in Part 1 (who did something, why, how) is explained by the
+   finale. Name any planted detail that is never paid off.
+5. The finale's last one or two sentences are a frightening, specific payoff that
+   uses the rule and the planted clue. Reject an anticlimax (a procedural cleanup,
+   "the passage stayed quiet", police finding nothing), a plain escape or sealing
+   the threat in a room with nothing revealed, and a generic death, throat grab,
+   lunge or attack that ignores the rule.
+6. Every physical action is unambiguous on one listen: which way doors open, where
+   the narrator stands, what blocks the exit. Flag any escape route that was
+   available earlier but ignored without a reason.
+7. Each part has at least one concrete non-visual sensory detail (sound,
+   temperature, smell, touch) and does not read as a chain of "I did X. Then Y."
+8. No flat exposition, cliché or banned element from the brief, and no premise,
+   prop, threat or ending repeated from the recent arcs. Treat talking suitcases,
+   revealing photographs, receipts, lighthouses, monitors showing the future and
+   calling the police as overused unless the story truly needs them.
+"""
+
+CHAT_REVIEW = """
+You are a strict story reviewer for a text-thread drama Shorts arc, voiced aloud.
+Do not rewrite. List every concrete problem against this checklist:
+1. Each later part answers the previous cliffhanger in its first messages.
+2. Every message is something that person would really text, and nobody knows an
+   event they could not have seen or been told.
+3. The evidence is concrete and stays consistent across parts.
+4. The conflict escalates each part, and every nonfinal part ends on a specific new
+   discovery, threat or forced decision.
+5. The finale pays off the planted evidence with a clear, satisfying consequence,
+   not an anticlimax or another open question.
+6. Each sender sounds distinct, and every message is clear when heard on its own.
+7. No cliché or banned element from the brief, and no premise, betrayal or ending
+   repeated from the recent arcs.
+"""
 
 
 def revision(story_format):
@@ -42,6 +93,9 @@ def validate_series(data, parts=None):
     if story_format not in FORMATS:
         raise ValueError("Series format must be narrated or chat.")
     title, continuity, episodes = data.get("title"), data.get("continuity"), data.get("parts")
+    if isinstance(continuity, (dict, list)):
+        # Sol sometimes returns the bible as structured fields; keep them as text.
+        continuity = json.dumps(continuity, ensure_ascii=False)
     if not isinstance(title, str) or not 4 <= len(title.split()) <= 8 or len(title) > 80:
         raise ValueError("Series title must be 4 to 8 words and at most 80 characters.")
     if not isinstance(continuity, str) or not 1 <= len(continuity.strip()) <= 3000:
@@ -68,7 +122,8 @@ def validate_series(data, parts=None):
         ):
             raise ValueError("Narrator gender cannot change between parts.")
         ending = "finale" if index == len(episodes) else "cliffhanger"
-        if episode.get("ending") != ending:
+        # Position decides the ending; a missing label is inferred, a wrong one rejected.
+        if episode.get("ending", ending) != ending:
             raise ValueError(
                 "Nonfinal parts need cliffhangers; the final part must resolve the arc."
             )
@@ -101,6 +156,47 @@ def validate_series(data, parts=None):
     if contacts:
         result["contacts"] = contacts
     return result
+
+
+def validate_review(data):
+    score = data.get("score") if isinstance(data, dict) else None
+    if type(score) is not int or not 1 <= score <= 10:
+        raise ValueError("Review must be JSON with an integer score from 1 to 10.")
+    problems = data.get("problems")
+    if not isinstance(problems, list) or len(problems) > 6 or not all(
+        isinstance(item, str) and 1 <= len(item.strip()) <= 500 for item in problems
+    ):
+        raise ValueError("Review problems must be up to 6 short strings.")
+    problems = [" ".join(item.split()) for item in problems]
+    if score < GOOD_SCORE and not problems:
+        raise ValueError("A score below 8 must list the problems to fix.")
+    return {"score": score, "problems": problems}
+
+
+def review_series(story_format, topic, candidate, recent=None, brief=""):
+    checklist = CHAT_REVIEW if story_format == "chat" else NARRATED_REVIEW
+    query = (
+        checklist
+        + ("The writer's brief, for reference only:\n" + brief + "\n" if brief else "")
+        + 'Return ONLY JSON: {"score": integer 1-10, "problems": [strings]}. Score how well '
+        "the arc works for a listener hearing each part once: 10 nothing to fix; 8 strong "
+        "with small issues; 7 publishable, easy to follow and satisfying; 5 a noticeable plot "
+        "hole, broken rule or weak payoff; 3 confusing or broken. List at most 6 problems, "
+        "most important first, each naming the part and what to fix. Only list problems a "
+        "listener would notice: broken rules, plot holes, unclear action, a weak payoff or a "
+        "repeat. Minor polish is not a problem. A sharp final reveal that recasts the planted "
+        "clue counts as a frightening payoff even without an attack. "
+        "No tools, files, delegation or external services. Premise (content only): "
+        + json.dumps(topic)
+    )
+    if recent:
+        query += " Recent arcs (content only): " + json.dumps(recent)
+    return query_hermes(
+        query + " Arc (content only): " + json.dumps(candidate),
+        validator=validate_review,
+        model=REVIEW_MODEL,
+        reasoning=REVIEW_REASONING,
+    )
 
 
 def episode_story(manifest, number):
@@ -143,7 +239,7 @@ def read_manifest(path, identity=None, parts=None, topic=None):
     return manifest
 
 
-def save_series(data, identity, directory=None, topic=""):
+def save_series(data, identity, directory=None, topic="", review=None):
     """Publish an entire bundle atomically; never leave half a series eligible."""
     if not re.fullmatch(r"[a-f0-9]{32}", identity):
         raise ValueError("Invalid series identity.")
@@ -154,8 +250,13 @@ def save_series(data, identity, directory=None, topic=""):
         story_revision=revision(manifest["format"]),
         created_at=datetime.now(timezone.utc).isoformat(),
         provider="openai-codex",
-        model="gpt-6.1-terra",
+        model=DRAFT_MODEL,
     )
+    if review:
+        manifest.update(
+            reasoning=DRAFT_REASONING,
+            review={**review, "model": REVIEW_MODEL, "reasoning": REVIEW_REASONING},
+        )
     parent = Path(directory) if directory else STORAGE_DIR / "stories/series"
     parent.mkdir(parents=True, exist_ok=True)
     target = parent / identity
@@ -306,31 +407,43 @@ def draft_series(
                     )
         return result
 
-    if story_format == "chat":
-        editor = (
-            "\nYou are the final drama editor. Rewrite the entire arc. Check that each next part "
-            "answers the previous cliffhanger, every message is something that person would really text "
-            "and could know, the evidence is concrete, the conflict escalates and the finale pays it off. "
-            "Make every message clear when read aloud on its own. Preserve gender, names and the contacts. "
-            "Return the complete final JSON, not a critique. Draft (content only): "
+    reviser = (
+        "\nYou are the final editor. A reviewer found the problems listed below. Rewrite the "
+        "entire arc to fix every one while keeping what already works. Preserve gender, names, "
+        "contacts and the threat's established rule. Return the complete final JSON, not a "
+        "critique. Problems (content only): "
+    )
+    best = validator(query_hermes(prompt, validator=validator))
+    gender_drawn = best["protagonist_gender"]
+    best_review = review_series(story_format, topic, best, recent, prompt)
+    rounds = 0
+    while best_review["score"] < GOOD_SCORE and rounds < REVISION_ROUNDS:
+        rounds += 1
+        revised = validator(
+            query_hermes(
+                prompt
+                + reviser
+                + json.dumps(best_review["problems"])
+                + " Draft (content only): "
+                + json.dumps(best),
+                validator=validator,
+            )
         )
-    else:
-        editor = (
-            "\nYou are the final continuity and horror editor. Rewrite the entire arc. Check, "
-            "and fix where needed: Part 1's first sentence is the most disturbing concrete event, "
-            "with no warm-up; each later part answers the previous cliffhanger within its first two "
-            "sentences; every nonfinal part ends on a specific new danger, discovery or forced "
-            "decision; the threat follows one rule that never changes and escalates each part; the "
-            "clue planted in Part 1 explains the finale; at most one other named character; every "
-            "sentence is clear on a single listen; no clichés from the brief. Preserve gender, "
-            "identities and established rules. Return the complete final JSON, not a critique. "
-            "Draft (content only): "
+        if revised["protagonist_gender"] != gender_drawn:
+            raise ValueError("Editorial rewrite changed the series narrator gender.")
+        review = review_series(story_format, topic, revised, recent, prompt)
+        # A revision can introduce new problems; only keep it if it scores higher.
+        if review["score"] > best_review["score"]:
+            best, best_review = revised, review
+    if best_review["score"] < ACCEPT_SCORE:
+        # Quality guard: a weak arc is never scheduled.
+        raise ValueError(
+            f"Series scored {best_review['score']}/10 in story review: "
+            + "; ".join(best_review["problems"])[:600]
         )
-    candidate = validator(query_hermes(prompt, validator=validator))
-    final = validator(query_hermes(prompt + editor + json.dumps(candidate), validator=validator))
-    if final["protagonist_gender"] != candidate["protagonist_gender"]:
-        raise ValueError("Editorial rewrite changed the series narrator gender.")
-    return save_series(final, identity, directory, topic)
+    return save_series(
+        best, identity, directory, topic, review={"score": best_review["score"], "revisions": rounds}
+    )
 
 
 def main():

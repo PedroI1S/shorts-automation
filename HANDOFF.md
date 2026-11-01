@@ -131,7 +131,8 @@ its next run; publication settings were preserved.
   telegram_notify_enabled=true, footage_discovery=creator_downloads. New uploads
   are private with a future publishAt, then YouTube releases them at the assigned
   New York slots. Preparation caps at three only when both upload modes are off.
-- Hermes drafting uses the existing openai-codex / gpt-6.1-terra login. Telegram
+- Hermes drafting uses the existing openai-codex login: gpt-6.1-sol (medium)
+  writes and gpt-6.1-terra (high) scores each arc (see docs/STORY_WORKFLOW.md). Telegram
   upload/scheduling notifications are explicitly authorized; other external
   messages still require an explicit instruction.
 - AGY gemini-3.8-flash-medium plans searches and ranks evidence. A bounded Python

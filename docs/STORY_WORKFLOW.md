@@ -11,10 +11,12 @@ $env:PYTHONUTF8 = '1'
 .\.venv\Scripts\python.exe -m shorts_automation.stories.draft_story --topic 'A night guard finds his name on a future visitor log'
 ```
 
-Hermes uses the existing openai-codex / gpt-6.1-terra subscription login, with
-session tools disabled, bounded turns and a 150-second timeout per call. Drafting
-now makes two calls: an original draft, then a final editorial rewrite checking
-causality, narrator knowledge, continuity and the frightening payoff. It does
+Hermes uses the existing openai-codex subscription login, with session tools
+disabled, bounded turns and a 480-second timeout per call. gpt-6.1-sol (medium
+reasoning) writes; gpt-6.1-terra (high) reviews. Series drafting makes a draft,
+a scored review (1-10 against a listener-facing checklist), and, below 8, one
+targeted revision that is kept only if it scores higher. Arcs scoring below 7
+are not saved or scheduled. The manifest records the score and models. It does
 not buy credits or switch to a paid provider. Draft JSON is saved under unique
 storage/stories filenames with model/topic/time/word-count metadata.
 Each call allows at most one repair for malformed JSON or length validation;

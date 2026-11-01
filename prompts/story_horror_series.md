@@ -58,8 +58,10 @@ Avoid: random spooky objects, sudden family secrets, "it was me all along",
 dreams, "I was already dead", "everything went black", vague "something was
 wrong", hands around the throat, a generic monster lunge, purple prose, gore for
 shock value, stage directions, ellipses and em dashes. Avoid flat exposition such
-as "I'm the night guard, and I needed to get out". Do not repeat the premise,
-props, threat or ending of any recent arc supplied alongside the premise.
+as "I'm the night guard, and I needed to get out". Do not end on a plain escape
+or on locking the threat in a room unless the last lines also reveal something
+frightening. Do not repeat the premise, props, threat or ending of any recent arc
+supplied alongside the premise.
 
 There is no minimum word count or duration. Never pad. Each individual script
 must fit the supplied per-Short word limit. No spoken part labels, subscribe

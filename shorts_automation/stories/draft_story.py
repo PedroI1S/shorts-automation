@@ -235,7 +235,17 @@ def parse_result(output, validator=validate_story):
     return validator(json.loads(results[0]["text"]))
 
 
-def query_hermes(prompt, repair_remaining=1, validator=validate_story):
+# Writer chosen by a 2026-11-01 trial: Sol wrote the most original arc; Terra is a
+# fast, consistent reviewer. Sol calls took ~3 minutes; the task allows 30 per run.
+DRAFT_MODEL = "gpt-6.1-sol"
+DRAFT_REASONING = "medium"
+REVIEW_MODEL = "gpt-6.1-terra"
+REVIEW_REASONING = "high"
+DRAFT_TIMEOUT_SECONDS = 480
+
+
+def query_hermes(prompt, repair_remaining=1, validator=validate_story, model=None, reasoning=None):
+    model, reasoning = model or DRAFT_MODEL, reasoning or DRAFT_REASONING
     home = os.environ.get("HERMES_HOME")
     executable = str(Path(home) / "bin/hermes.exe") if home else shutil.which("hermes")
     if not executable or not Path(executable).is_file():
@@ -251,7 +261,7 @@ def query_hermes(prompt, repair_remaining=1, validator=validate_story):
                 "--provider",
                 "openai-codex",
                 "--model",
-                "gpt-6.1-terra",
+                model,
                 "--toolsets",
                 "",
                 "--ignore-rules",
@@ -260,14 +270,14 @@ def query_hermes(prompt, repair_remaining=1, validator=validate_story):
                 "--max-turns",
                 "2",
                 "--reasoning",
-                "low",
+                reasoning,
                 "--query-file",
                 str(query),
             ],
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=150,
+            timeout=DRAFT_TIMEOUT_SECONDS,
             env={**os.environ, "PYTHONUTF8": "1"},
             check=False,
         )
@@ -287,6 +297,8 @@ def query_hermes(prompt, repair_remaining=1, validator=validate_story):
             + result.stdout[-8000:],
             repair_remaining=0,
             validator=validator,
+            model=model,
+            reasoning=reasoning,
         )
 
 
@@ -345,7 +357,7 @@ def draft(topic, gender=None):
     story.update(
         topic=topic,
         provider="openai-codex",
-        model="gpt-6.1-terra",
+        model=DRAFT_MODEL,
         created_at=datetime.now(timezone.utc).isoformat(),
         word_count=len(story["script"].split()),
         status="draft",
