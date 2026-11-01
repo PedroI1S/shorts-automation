@@ -1,0 +1,6 @@
+# Local Kokoro-82M voice environment (.venv-kokoro, Python 3.12; Kokoro does not support 3.13).
+# Install torch first from the CPU index:
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu
+kokoro==0.9.4
+misaki[en]==0.9.4
+soundfile==0.14.0

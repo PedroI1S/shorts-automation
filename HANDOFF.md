@@ -1,10 +1,32 @@
 # Current handoff
 
-Snapshot: 2026-10-31. Read this first, then SETUP_WINDOWS.md and the current source.
+Snapshot: 2026-11-01. Read this first, then SETUP_WINDOWS.md and the current source.
 The complete chronological record is preserved in
 [docs/history/HANDOFF_2026-10-28.md](docs/history/HANDOFF_2026-10-28.md). Historical
 statements about missing Windows setup, model access or upload integration are
 superseded by this summary.
+
+## Local Kokoro narration — 2026-11-01
+
+At the user's request all narration now uses hexgrad/Kokoro-82M (Apache-2.0)
+locally on the CPU; Fish Audio, ElevenLabs and Edge were removed from the code,
+and secrets/fish.local.json and secrets/elevenlabs.local.json were moved to the
+Windows Recycle Bin. The user should also revoke those API keys on the provider
+dashboards. Kokoro needs Python <3.13, so it runs in `.venv-kokoro` (Python 3.12,
+CPU torch) through shorts_automation/stories/kokoro_worker.py; the main .venv is
+unchanged. Voices: config.KOKORO_VOICES (am_fenrir / af_heart narrate; four more
+per gender for chat contacts, so same-gender contacts work). Speed 1.1; the
+pre-TTS duration gate uses 3.0 words/s (measured 3.3-3.7).
+
+secrets/production.json now has tts_provider="kokoro" without the Fish fields;
+publication mode and story_format were not changed. The four queued, undrafted
+jobs were switched from fish to kokoro (backup:
+storage/usage.pre-kokoro-2026-11-01T030947.sqlite3). The eleven already scheduled
+uploads, including the complete 3-part arc, keep their Fish audio and history.
+Validation on Windows: full offline suite and Ruff on changed files passed; a real
+9 s narration + caption preview (storage/output/kokoro_caption_test.mp4) and a
+real two-voice chat (af_heart/af_bella, 14.4 s audio in 20.7 s) were generated.
+No live drafting, full production render or upload was run with Kokoro yet.
 
 ## Narrated horror writing upgrade — 2026-10-31
 
@@ -29,10 +51,8 @@ tags. Details are in docs/STORY_WORKFLOW.md and docs/PRODUCTION.md.
 
 Not yet activated on the Windows PC: secrets/production.json there still says
 `story_format="mixed"` until the user, or Hermes on the user's instruction, sets
-`"story_format": "series"`. Publication mode is unchanged. With the current Fish
-settings (one male voice_id, one female_voice_id), chat contacts are always the
-opposite gender to the protagonist; add `chat_extra_voice_ids` to
-secrets/fish.local.json for same-gender contacts.
+`"story_format": "series"`. Publication mode is unchanged. (Superseded 2026-11-01: Kokoro voice pools now
+cover same-gender chat contacts; see the Kokoro section above.)
 
 Validation: 261 offline tests (19 new) and Ruff checks on changed files passed on
 macOS with a temporary stand-in production config. An offline preview was rendered
@@ -75,11 +95,8 @@ its next run; publication settings were preserved.
 
 - Keep Windows on the Ryzen 5 4600G / integrated graphics / 16 GB PC.
 - Use existing free allowances only. No purchases, upgrades or paid fallbacks.
-- Keep Fish and ElevenLabs; retain the selected Fish voice and accepted synchronized
-  captions with the moving yellow word highlight.
-- User verified Fish's commercial-use restriction concerns selling generated voice
-  products and accepted its use for narrated Shorts. Record this as user verification,
-  not independent legal advice. No paid upgrade/fallback is authorized.
+- Narration is local Kokoro-82M only (2026-11-01); keep the accepted synchronized
+  captions with the moving yellow word highlight. No paid upgrade/fallback is authorized.
 - Target three English Shorts daily at 07:00, 12:00 and 19:00 America/New_York.
 - Maintain at least three confirmed future public releases. The worker targets
   four so one can release while a replacement is prepared. Private previews,
@@ -139,8 +156,8 @@ its next run; publication settings were preserved.
 
 ## Remaining rollout work
 
-- Fish use for narrated Shorts was accepted based on the user's verification.
-  Keep the verified free-offer expiry guard and the selected voice; do not buy a plan.
+- Review the first full Kokoro-narrated production render before relying on it
+  unattended; the voice was only checked on short samples.
 - Old NodeCore/Minetest previews are retired from the automatic backlog with their
   files/history retained. Their still-future slots are replaced once in chronological
   publishing order for the new Minecraft parkour format.

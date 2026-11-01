@@ -1,7 +1,7 @@
 # YouTube Shorts automation
 
 Original English horror stories, creator-provided Minecraft parkour footage,
-Fish/ElevenLabs narration, synchronized word highlighting, and local FFmpeg renders.
+local Kokoro-82M narration, synchronized word highlighting, and local FFmpeg renders.
 
 Stories now mix standalone Shorts with connected 3–4-part horror arcs. Early parts
 end on concrete cliffhangers, with numbered titles and on-screen continuation cues;
@@ -76,7 +76,7 @@ Windows launchers live beside the workflow they launch:
 ## Workflows
 
 The automatic path is `production.py` → durable queue → Hermes draft/edit →
-verified creator footage → Fish narration → synchronized captions → local FFmpeg
+verified creator footage → local Kokoro narration → synchronized captions → local FFmpeg
 render → media validation → scheduled YouTube upload → Telegram notification.
 The [development guide](docs/DEVELOPMENT.md) maps each stage to its source files.
 
@@ -93,7 +93,7 @@ To prepare one manually queued evaluation video, first import creator footage
 with `python -m shorts_automation.footage.creator_footage` and use its printed file path:
 
 ```powershell
-.\.venv\Scripts\python.exe orchestrator.py enqueue --topic "A night guard finds his name on tomorrow's visitor log" --provider fish --background-file <creator-clip.mp4>
+.\.venv\Scripts\python.exe orchestrator.py enqueue --topic "A night guard finds his name on tomorrow's visitor log" --provider kokoro --background-file <creator-clip.mp4>
 powershell -NoProfile -ExecutionPolicy Bypass -File .\shorts_automation\automation\run_orchestrator_windows.ps1 -MaxJobs 1
 .\.venv\Scripts\python.exe orchestrator.py status
 ```
@@ -105,8 +105,8 @@ legacy Commons behavior; see the footage guide before choosing an entry point.
 ## Public rollout
 
 The user explicitly enabled public scheduling and Telegram notifications on
-2026-10-29. The user verified Fish's use for narrated Shorts;
-this acceptance is recorded in secrets/production.json. Old-format previews are retired
+2026-10-29. Narration switched to local Kokoro-82M (Apache-2.0) on 2026-11-01.
+Old-format previews are retired
 without deleting their media, and the backlog uses the Minecraft parkour segment
 workflow. A private YouTube upload succeeded; live interrupted-upload reconciliation
 and a real production reboot test remain unverified. This project does not guarantee monetization,

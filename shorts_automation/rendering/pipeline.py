@@ -40,7 +40,7 @@ def run_pipeline(
     subreddit: str = "shortscarystories",
     voice: str = DEFAULT_VOICE,
     gameplay_query: str = None,
-    tts_provider: str = "edge",
+    tts_provider: str = "kokoro",
     story_file: Path | None = None,
     background_file: Path | None = None,
 ) -> Path:
@@ -213,12 +213,14 @@ def main():
     parser.add_argument(
         "--reddit", type=str, default="shortscarystories", help="Subreddit to scrape premises from."
     )
-    parser.add_argument("--voice", type=str, default=DEFAULT_VOICE, help="Edge-TTS voice name.")
+    parser.add_argument(
+        "--voice", type=str, default=DEFAULT_VOICE, help="Kokoro voice, e.g. am_michael."
+    )
     parser.add_argument(
         "--tts-provider",
-        choices=["edge", "fish", "elevenlabs"],
-        default="edge",
-        help="Explicit voice provider; local evaluation only.",
+        choices=["kokoro"],
+        default="kokoro",
+        help="Voice provider (local Kokoro-82M).",
     )
     parser.add_argument(
         "--story-file", type=Path, help="Validated draft JSON; skips story generation and Reddit."

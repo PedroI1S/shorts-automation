@@ -8,6 +8,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from config import SPEECH_WORDS_PER_SECOND
 from shorts_automation.rendering import pipeline, video_compiler
 from shorts_automation.state.usage_store import UsageStore
 from shorts_automation.stories.tts_engine import estimate_duration
@@ -23,22 +24,23 @@ def write_story(directory, words):
 
 class PreTtsDurationTests(unittest.TestCase):
     def test_overlong_script_rejected_before_tts_and_reservation(self):
-        # 144 words passes draft validation (<= 146) but at Edge's rate (2.5 w/s) is 58.4s with tail.
+        # 144 words passes draft validation (<= 146); a 2.5 w/s voice makes it 58.4s with tail.
         with tempfile.TemporaryDirectory() as temp:
             store = UsageStore(Path(temp) / "db.sqlite3")
             story = write_story(temp, 144)
             with (
                 patch("shorts_automation.state.usage_store.UsageStore", return_value=store),
+                patch.dict(SPEECH_WORDS_PER_SECOND, {"kokoro": 2.5}),
                 patch.object(pipeline, "generate_speech") as speech,
                 redirect_stdout(io.StringIO()),
             ):
                 with self.assertRaisesRegex(ValueError, "no TTS call made"):
-                    pipeline.run_pipeline(story_file=story, tts_provider="edge")
+                    pipeline.run_pipeline(story_file=story, tts_provider="kokoro")
                 speech.assert_not_called()
             store.begin(" ".join(["word"] * 144))  # Story was never reserved.
 
-    def test_known_good_fish_length_reaches_tts(self):
-        # 146 words rendered at 56.29s on the real Fish voice; it must not be rejected.
+    def test_longest_valid_story_reaches_tts(self):
+        # The longest story draft validation allows must fit at Kokoro's rate.
         with tempfile.TemporaryDirectory() as temp:
             store = UsageStore(Path(temp) / "db.sqlite3")
             story = write_story(temp, 146)
@@ -50,11 +52,11 @@ class PreTtsDurationTests(unittest.TestCase):
                 redirect_stdout(io.StringIO()),
             ):
                 with self.assertRaisesRegex(RuntimeError, "stop here"):
-                    pipeline.run_pipeline(story_file=story, tts_provider="fish")
+                    pipeline.run_pipeline(story_file=story, tts_provider="kokoro")
                 speech.assert_called_once()
 
     def test_estimate_counts_prepared_words_and_rejects_unknown_provider(self):
-        self.assertAlmostEqual(estimate_duration("one  two\n three", "edge"), 3 / 2.5)
+        self.assertAlmostEqual(estimate_duration("one  two\n three", "kokoro"), 3 / 3.0)
         with self.assertRaises(ValueError):
             estimate_duration("hello", "mystery")
 

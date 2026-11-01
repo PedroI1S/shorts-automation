@@ -41,13 +41,15 @@ class QueueTestCase(unittest.TestCase):
 
 class OrchestratorTests(QueueTestCase):
     def test_happy_path_stops_at_review_and_is_idempotent(self):
-        job = self.queue.enqueue("a lighthouse keeper hears knocking", "fish", "Labyrinth Minetest")
+        job = self.queue.enqueue(
+            "a lighthouse keeper hears knocking", "kokoro", "Labyrinth Minetest"
+        )
         _, processed = self.run_once()
         row = self.queue.get(job)
         self.assertEqual(row["stage"], "rendered")
         self.assertEqual(row["render_job"], "render-123")
         self.assertTrue(Path(row["output"]).is_file())
-        self.assertEqual(self.h.renders[0][1]["tts_provider"], "fish")
+        self.assertEqual(self.h.renders[0][1]["tts_provider"], "kokoro")
         self.assertEqual(self.h.renders[0][1]["gameplay_query"], "Labyrinth Minetest")
         self.assertEqual(self.run_once()[1], [])  # Nothing left: no duplicate draft or render.
         self.assertEqual((len(self.h.drafts), len(self.h.renders)), (1, 1))

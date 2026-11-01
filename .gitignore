@@ -25,3 +25,4 @@ htmlcov/
 *.egg-info/
 build/
 dist/
+.venv-kokoro/

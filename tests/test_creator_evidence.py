@@ -238,7 +238,7 @@ class CreatorImportTests(unittest.TestCase):
             patch("shorts_automation.rendering.pipeline.run_pipeline") as renderer,
         ):
             production.render_automatic(
-                config, story_file=self.root / "story.json", tts_provider="fish"
+                config, story_file=self.root / "story.json", tts_provider="kokoro"
             )
         source.assert_called_once()
         old_source.assert_not_called()

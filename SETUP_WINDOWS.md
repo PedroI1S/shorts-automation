@@ -25,10 +25,13 @@ its three-video preparation backlog is already full.
 
 ## Fresh Windows installation
 
-1. Install Python 3.13 with its launcher, and FFmpeg/ffprobe on PATH.
+1. Install Python 3.13 and 3.12 with the launcher, and FFmpeg/ffprobe on PATH.
+   3.12 is only for the local Kokoro voice environment (.venv-kokoro).
 2. Place the source in a local folder outside OneDrive.
 3. Run `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\setup_windows.ps1`.
-   It creates a native .venv, installs requirements and runs the complete suite.
+   It creates a native .venv, installs requirements, creates .venv-kokoro with CPU
+   PyTorch and Kokoro-82M (requirements-kokoro.txt), and runs the complete suite.
+   The first narration downloads the Kokoro model (~330 MB) from Hugging Face.
 4. Run `shorts_automation\rendering\run_preview_windows.ps1` and check the saved video.
 5. Configure credentials privately. Preserve local voice selections. Existing
    Hermes and AGY subscription logins must be configured separately on a new PC.
@@ -44,8 +47,8 @@ registration. Actual pre-login operation is not provided.
 All formerly root JSON files live in the Git-ignored secrets/ folder. This includes
 noncredential production settings and the OpenCode example as well as credentials.
 
-secrets/fish.local.json and secrets/elevenlabs.local.json provide api_key/voice_id. The code also
-accepts provider-specific environment variables. secrets/client_secret.json and secrets/token.json
+Narration is local Kokoro and needs no credentials (the Fish/ElevenLabs files were
+removed on 2026-11-01). secrets/client_secret.json and secrets/token.json
 hold Google OAuth data. Keep all of them out of chat, Telegram, Git and archives.
 Do not print their contents to diagnose setup. `build_transfer_package.py` selects
 source and accepted comparison media without these files or virtual environments.

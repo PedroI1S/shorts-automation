@@ -17,7 +17,7 @@ SAMPLE = (
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--provider", choices=["edge", "elevenlabs", "fish"], default="edge")
+    parser.add_argument("--provider", choices=["kokoro"], default="kokoro")
     parser.add_argument("--voice", default=DEFAULT_VOICE)
     parser.add_argument("--text", default=SAMPLE)
     parser.add_argument(
@@ -43,7 +43,7 @@ def main():
             "ending": "finale" if args.series_part == args.series_total else "cliffhanger",
         }
     if len(args.text) > 1200:
-        parser.error("Preview limited to 1,200 characters to conserve free quota.")
+        parser.error("Preview limited to 1,200 characters.")
     if args.audio_metadata:
         import json
 
@@ -52,7 +52,6 @@ def main():
         metadata = json.loads(args.audio_metadata.read_text())
         audio = args.audio_metadata.with_suffix(".mp3")
         duration, words = audio_duration(audio), metadata["words"]
-        args.provider = metadata["provider"]
     else:
         audio, duration, words = generate_speech(args.text, args.voice, args.provider)
     captions = generate_subtitles_stream(words, duration, **({"series": series} if series else {}))
@@ -107,8 +106,6 @@ def main():
         check=True,
     )
     print(f"Local evaluation sample: {output}")
-    if args.provider == "elevenlabs":
-        print("ElevenLabs free-plan audio: noncommercial evaluation only.")
 
 
 if __name__ == "__main__":

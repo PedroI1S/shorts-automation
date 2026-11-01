@@ -62,8 +62,8 @@ GAME_TITLE_TERMS = (
 def load_config(path=CONFIG_PATH):
     config = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     ZoneInfo(config["timezone"])
-    if config["tts_provider"] not in ("fish", "elevenlabs", "edge"):
-        raise ValueError("Unknown configured voice provider.")
+    if config["tts_provider"] != "kokoro":
+        raise ValueError("Configured voice provider must be the local kokoro model.")
     for name in ("enabled", "publish_enabled"):
         if type(config[name]) is not bool:
             raise ValueError(f"{name} must be true or false.")
@@ -127,7 +127,6 @@ def load_config(path=CONFIG_PATH):
         raise ValueError(
             "Production requires approved Creative Commons or creator-permission metadata."
         )
-    datetime.fromisoformat(config["fish_free_until"])
     if config.get("footage_discovery", "fixed") not in (
         "antigravity",
         "creator_downloads",
@@ -990,13 +989,6 @@ def cycle(
             if shutil.disk_usage(STORAGE_DIR).free < config["min_free_disk_gb"] * 1024**3:
                 raise RuntimeError(
                     "Free disk below production limit; no generation or upload attempted."
-                )
-            if (
-                config["tts_provider"] == "fish"
-                and now.date() > datetime.fromisoformat(config["fish_free_until"]).date()
-            ):
-                raise RuntimeError(
-                    "Verified Fish free window expired; stopped without paid fallback."
                 )
             usage.import_outputs()
             queue.recover_interrupted(usage)

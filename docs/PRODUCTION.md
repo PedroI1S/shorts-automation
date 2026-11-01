@@ -97,8 +97,8 @@ test is still outstanding.
 ## Automatic pass
 
 1. Acquire the same OS lock as the manual render runner; concurrent runs exit.
-2. Stop when paused, free disk is below 5 GiB, or the verified Fish free window
-   has expired. No paid service/model fallback exists.
+2. Stop when paused or free disk is below 5 GiB. Narration is local Kokoro, so
+   there is no voice allowance to expire. No paid service/model fallback exists.
 3. Recover interrupted render state. Plan each future slot and queue job in one
    SQLite transaction, respecting existing manual publishing reservations.
 4. Choose a previously unused setting/object/anomaly premise. Hermes creates
@@ -122,8 +122,8 @@ test is still outstanding.
    logs. Locked Windows temporary files are skipped without invalidating a pass.
 
 Creator permission is stored with its actual URL/excerpt as Creator commercial
-permission, not falsely labelled Creative Commons. The user verified and accepted
-Fish's use for narrated Shorts; that decision is recorded in secrets/production.json.
+permission, not falsely labelled Creative Commons. `tts_provider` must be `kokoro`;
+load_config rejects the removed fish/elevenlabs/edge providers.
 See [footage research](FOOTAGE_RESEARCH.md) for source allocation.
 
 ## Health, storage and recovery
@@ -196,6 +196,4 @@ HTTP 403 for a subsequent videos.list processing/status read. The current grant
 also includes youtube.force-ssl; on 2026-10-29, live snippet/status reads and
 description-only updates succeeded for all six upcoming scheduled videos, with
 their release times and publication status verified unchanged.
-The worker stops after the verified Fish free window (currently
-2026-11-30) unless that offer is explicitly reverified. Do not buy a plan or infer
-commercial clearance from a successful render.
+Do not buy a plan or infer commercial clearance from a successful render.

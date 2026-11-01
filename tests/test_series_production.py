@@ -34,7 +34,6 @@ class SeriesProductionTests(unittest.TestCase):
             "story_format": "mixed",
             "minimum_scheduled_videos": 3,
             "footage_discovery": "fixed",
-            "fish_free_until": "2099-12-31",
             "publish_enabled": True,
             "private_upload_enabled": False,
             "telegram_notify_enabled": False,

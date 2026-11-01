@@ -27,7 +27,7 @@ class ProjectLayoutTests(unittest.TestCase):
         self.assertEqual(youtube_uploader.TOKEN_LOCK, root / "storage/youtube-token.lock")
         self.assertEqual(youtube_uploader.CLIENT_SECRETS_FILE, root / "secrets/client_secret.json")
         self.assertEqual(telegram_notifier.ROUTE_FILE, root / "secrets/telegram.local.json")
-        self.assertEqual(tts_engine.SECRETS_DIR, root / "secrets")
+        self.assertEqual(tts_engine.KOKORO_PYTHON, root / ".venv-kokoro/Scripts/python.exe")
         self.assertEqual(draft_story.BASE_DIR, root)
         self.assertEqual(agy_footage_research.PROMPT_PATH, root / "prompts/agy_footage_supply.md")
 

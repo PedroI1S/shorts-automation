@@ -100,7 +100,9 @@ separate, clearly scoped work and consume allowances.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\shorts_automation\rendering\run_preview_windows.ps1
 ```
 
-This reuses the accepted Fish audio/metadata and writes windows_caption_test.mp4.
+This reuses saved (historical Fish) audio/metadata and writes windows_caption_test.mp4.
+For a fresh Kokoro sample run `python -m shorts_automation.rendering.speech_preview`,
+or compare voices with `.venv-kokoro\Scripts\python.exe scripts\kokoro_voice_test.py`.
 It preserves synchronized captions and the moving yellow word highlight without
 an AI request. It is separate from the unit suite.
 

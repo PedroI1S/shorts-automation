@@ -75,10 +75,14 @@ class SeriesHarness:
         )
         return path
 
-    def series_drafter(self, topic, *, parts, identity, gender, story_format="narrated", provider=None):
+    def series_drafter(
+        self, topic, *, parts, identity, gender, story_format="narrated", provider=None
+    ):
         self.drafts.append((topic, parts, identity))
         build = chat_arc if story_format == "chat" else arc
-        return save_series(build(parts, gender=gender, token=identity), identity, self.root / "series", topic)
+        return save_series(
+            build(parts, gender=gender, token=identity), identity, self.root / "series", topic
+        )
 
     def renderer(self, story_file, **kwargs):
         story = validate_story(json.loads(Path(story_file).read_text()))
@@ -105,7 +109,7 @@ class SeriesHarness:
 
 
 def queued_series(queue, parts=3):
-    jobs = [queue.enqueue(f"Premise {uuid4().hex}", "fish") for _ in range(parts)]
+    jobs = [queue.enqueue(f"Premise {uuid4().hex}", "kokoro") for _ in range(parts)]
     return series_queue.link(queue, jobs), jobs
 
 

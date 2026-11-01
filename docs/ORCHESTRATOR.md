@@ -11,7 +11,7 @@ See PRODUCTION.md; public scheduling was explicitly enabled on 2026-10-29.
 ```powershell
 $env:PYTHONUTF8 = '1'
 .\.venv\Scripts\python.exe orchestrator.py enqueue --topic "A night guard finds his name on tomorrow's visitor log"
-.\.venv\Scripts\python.exe orchestrator.py enqueue --topics-file topics.txt --provider fish
+.\.venv\Scripts\python.exe orchestrator.py enqueue --topics-file topics.txt --provider kokoro
 powershell -NoProfile -ExecutionPolicy Bypass -File .\shorts_automation\automation\run_orchestrator_windows.ps1 -MaxJobs 1
 .\.venv\Scripts\python.exe orchestrator.py status
 .\.venv\Scripts\python.exe orchestrator.py show <id-prefix>
@@ -24,7 +24,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\shorts_automation\automati
 ```
 
 IDs accept unique prefixes of at least four characters. `enqueue` defaults to
-Fish and accepts `--gameplay` or `--background-file`. Drafting/rendering consume
+local Kokoro and accepts `--gameplay` or `--background-file`. Drafting/rendering consume
 allowances; the offline preview does not. `run` never uploads. Removing `--dry-run`
 from a scheduling command uploads and schedules actual publication.
 

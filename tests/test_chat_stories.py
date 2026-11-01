@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from config import DEFAULT_VOICE, NARRATION_TAIL_SECONDS
+from config import DEFAULT_VOICE, KOKORO_VOICES, NARRATION_TAIL_SECONDS
 from shorts_automation.automation import production as p
 from shorts_automation.automation import series_queue
 from shorts_automation.automation.orchestrator import JobQueue
@@ -95,44 +95,36 @@ class ChatValidationTests(unittest.TestCase):
 
 
 class ChatVoiceTests(unittest.TestCase):
-    def settings(self, tmp, **extra):
-        (Path(tmp) / "fish.local.json").write_text(
-            json.dumps({"voice_id": "male-ref", "female_voice_id": "female-ref", **extra})
+    def test_opposite_gender_contact_uses_the_two_story_voices(self):
+        story = validate_story(chat_story())
+        self.assertEqual(
+            tts.chat_voice_plan(story, "kokoro"), {"me": "af_heart", "Jordan": DEFAULT_VOICE}
+        )
+        self.assertEqual(
+            tts.chat_voice_identity(story, "kokoro"), f"chat:me=af_heart|Jordan={DEFAULT_VOICE}"
+        )
+        self.assertEqual(
+            tts.chat_contact_capacity("kokoro", "female"),
+            {"male": len(KOKORO_VOICES["male"]), "female": len(KOKORO_VOICES["female"]) - 1},
         )
 
-    def test_opposite_gender_contact_uses_the_two_story_voices(self):
-        with (
-            tempfile.TemporaryDirectory() as tmp,
-            patch.object(tts, "SECRETS_DIR", Path(tmp)),
-            patch.dict("os.environ", {}, clear=True),
-        ):
-            self.settings(tmp)
-            story = validate_story(chat_story())
-            self.assertEqual(
-                tts.chat_voice_plan(story, "fish"), {"me": "female-ref", "Jordan": DEFAULT_VOICE}
-            )
-            self.assertEqual(
-                tts.chat_voice_identity(story, "fish"), "chat:me=female-ref|Jordan=male-ref"
-            )
-            self.assertEqual(tts.chat_contact_capacity("fish", "female"), {"male": 1, "female": 0})
-
-    def test_same_gender_contact_needs_an_extra_voice_before_any_tts(self):
+    def test_same_gender_contacts_get_distinct_pool_voices_before_any_tts(self):
         story = chat_story(contacts=[{"name": "Jordan", "gender": "female"}])
+        plan = tts.chat_voice_plan(validate_story(story), "kokoro")
+        self.assertEqual(plan, {"me": "af_heart", "Jordan": KOKORO_VOICES["female"][1]})
         with (
-            tempfile.TemporaryDirectory() as tmp,
-            patch.object(tts, "SECRETS_DIR", Path(tmp)),
-            patch.dict("os.environ", {}, clear=True),
+            patch.dict(KOKORO_VOICES, {"female": ["af_heart"]}),
+            self.assertRaisesRegex(RuntimeError, "KOKORO_VOICES"),
         ):
-            self.settings(tmp)
-            with self.assertRaisesRegex(RuntimeError, "chat_extra_voice_ids"):
-                tts.chat_voice_plan(validate_story(story), "fish")
-            self.settings(tmp, chat_extra_voice_ids={"female": ["female-2"]})
-            plan = tts.chat_voice_plan(validate_story(story), "fish")
-            self.assertEqual(plan, {"me": "female-ref", "Jordan": "female-2"})
+            tts.chat_voice_plan(validate_story(story), "kokoro")
 
     def test_generate_chat_speech_offsets_words_and_joins_gaps(self):
-        # Edge needs no settings; keep PATH so the local ffmpeg can run.
-        with tempfile.TemporaryDirectory() as tmp, patch.object(tts, "AUDIO_DIR", Path(tmp)):
+        # Keep PATH so the local ffmpeg can run; the Kokoro worker itself is mocked.
+        with (
+            tempfile.TemporaryDirectory() as tmp,
+            patch.object(tts, "AUDIO_DIR", Path(tmp)),
+            patch.object(tts, "synthesize_kokoro") as batch,
+        ):
 
             def fake_speech(text, voice, provider):
                 path = Path(tmp) / f"clip_{abs(hash((text, voice)))}.mp3"
@@ -166,7 +158,9 @@ class ChatVoiceTests(unittest.TestCase):
                 patch.object(tts, "generate_speech", side_effect=fake_speech),
                 redirect_stdout(io.StringIO()),
             ):
-                path, duration, words, timeline = tts.generate_chat_speech(story, "edge")
+                path, duration, words, timeline = tts.generate_chat_speech(story, "kokoro")
+            batch.assert_called_once()
+            self.assertEqual(len(batch.call_args.args[0]), len(story["chat"]["messages"]))
             starts = [item["start"] for item in timeline["messages"]]
             clip = timeline["messages"][0]["end"]
             # me -> me is a short gap; me -> Jordan leaves time to show typing.
@@ -176,7 +170,7 @@ class ChatVoiceTests(unittest.TestCase):
             self.assertEqual({w["message"] for w in words}, {0, 1, 2, 3})
             self.assertGreaterEqual(words[-1]["start"], starts[3])
             saved = json.loads(path.with_suffix(".json").read_text())
-            self.assertEqual(saved["voice"], tts.chat_voice_identity(story, "edge"))
+            self.assertEqual(saved["voice"], tts.chat_voice_identity(story, "kokoro"))
 
 
 class ChatOverlayTests(unittest.TestCase):
@@ -271,7 +265,6 @@ class SeriesOnlyProductionTests(unittest.TestCase):
             "series_formats": ["narrated", "chat"],
             "minimum_scheduled_videos": 3,
             "footage_discovery": "fixed",
-            "fish_free_until": "2099-12-31",
             "publish_enabled": True,
             "private_upload_enabled": False,
             "telegram_notify_enabled": False,
@@ -411,22 +404,15 @@ class ChatPublishingTests(unittest.TestCase):
 
     def test_current_story_format_checks_the_whole_cast_voice_identity(self):
         story = validate_story(chat_story() | {"story_revision": "chat-v1"})
-        with (
-            tempfile.TemporaryDirectory() as tmp,
-            patch.object(tts, "SECRETS_DIR", Path(tmp)),
-            patch.dict("os.environ", {}, clear=True),
-        ):
-            (Path(tmp) / "fish.local.json").write_text(
-                json.dumps({"voice_id": "male-ref", "female_voice_id": "female-ref"})
-            )
+        with tempfile.TemporaryDirectory() as tmp:
             audio = Path(tmp) / "chat.mp3"
             output = Path(tmp) / "short.mp4"
             output.with_suffix(".metadata.json").write_text(
-                json.dumps({"story": story, "narration": str(audio), "tts_provider": "fish"})
+                json.dumps({"story": story, "narration": str(audio), "tts_provider": "kokoro"})
             )
             config = {"story_revision": "horror-v2"}
             audio.with_suffix(".json").write_text(
-                json.dumps({"voice": "chat:me=female-ref|Jordan=male-ref"})
+                json.dumps({"voice": f"chat:me=af_heart|Jordan={DEFAULT_VOICE}"})
             )
             self.assertTrue(p.current_story_format({"output": str(output)}, config))
             audio.with_suffix(".json").write_text(json.dumps({"voice": "chat:me=other"}))

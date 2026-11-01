@@ -21,14 +21,12 @@ FPS = 30
 MAX_DURATION_SECONDS = 58
 NARRATION_TAIL_SECONDS = 0.8  # Silent tail appended after narration by the compiler
 
-# Speaking rates (words/second) used to reject over-long scripts BEFORE any paid
-# or quota-limited TTS call. Lower = more conservative (predicts longer audio).
-# fish: measured 146 words -> 56.29 s (2.59 w/s) on the selected voice.
-# elevenlabs: short 31-word George sample measured 3.4 w/s; 2.9 adds margin.
-# edge: Christopher neural is ~150 wpm before pause tightening.
-SPEECH_WORDS_PER_SECOND = {"fish": 2.59, "elevenlabs": 2.9, "edge": 2.5}
-# Story length gates. The validator ceiling keeps Fish narration + tail under the limit
-# (146 / 2.59 = 56.4s + 0.8s = 57.2s <= 58s). The prompt leaves margin for LLM
+# Speaking rate (words/second) used to reject over-long scripts BEFORE any TTS
+# call. Lower = more conservative (predicts longer audio).
+# kokoro: a 59-word story measured 3.28-3.71 w/s across voices at speed 1.1; 3.0 adds margin.
+SPEECH_WORDS_PER_SECOND = {"kokoro": 3.0}
+# Story length gates. The validator ceiling keeps narration + tail under the limit
+# (146 / 3.0 = 48.7s + 0.8s = 49.5s <= 58s). The prompt leaves margin for LLM
 # miscounts. There is no minimum length; complete stories must not be padded.
 STORY_MAX_WORDS = 146
 STORY_PROMPT_MAX_WORDS = 140
@@ -41,12 +39,21 @@ CHAT_MAX_MESSAGE_WORDS = 30
 CHAT_GAP_SECONDS = 0.25  # Between consecutive messages from the same sender
 CHAT_SWITCH_GAP_SECONDS = 0.5  # When the other person answers
 
-# Audio / TTS Settings
-DEFAULT_VOICE = "en-US-ChristopherNeural"  # Deep, engaging male narrator
-# Alternative voices:
-# "en-US-GuyNeural"
-# "en-US-JennyNeural" (Female)
-# "en-GB-RyanNeural" (British accent)
+# Audio / TTS Settings: Kokoro-82M (hexgrad/Kokoro-82M, Apache-2.0), local CPU only.
+# Kokoro needs Python <3.13, so it runs in its own .venv-kokoro (Python 3.12).
+KOKORO_PYTHON = Path(
+    os.getenv("KOKORO_PYTHON", BASE_DIR / ".venv-kokoro" / "Scripts" / "python.exe")
+)
+KOKORO_REPO = "hexgrad/Kokoro-82M"
+KOKORO_SPEED = 1.1
+KOKORO_TIMEOUT_SECONDS = 900
+# The first voice of each gender narrates stories; the rest give chat contacts
+# distinct voices. Prefixes: a = American English, b = British English.
+KOKORO_VOICES = {
+    "male": ["am_fenrir", "am_michael", "am_puck", "bm_george", "bm_fable"],
+    "female": ["af_heart", "af_bella", "af_nicole", "bf_emma", "af_sarah"],
+}
+DEFAULT_VOICE = KOKORO_VOICES["male"][0]
 
 # Font & Subtitle Styling
 _font_candidates = [

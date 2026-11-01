@@ -281,7 +281,7 @@ def draft_series(
 
         if gender is None:
             raise ValueError("Chat arcs need an assigned protagonist gender for voice planning.")
-        capacity = chat_contact_capacity(provider or "fish", gender)
+        capacity = chat_contact_capacity(provider or "kokoro", gender)
     recent = recent_arcs(destination.parent.parent, story_format, exclude=identity)
     prompt = series_brief(story_format, parts, topic, gender, capacity, recent)
 
@@ -339,7 +339,7 @@ def main():
     parser.add_argument("--parts", type=int, choices=(3, 4), default=3)
     parser.add_argument("--format", choices=FORMATS, default="narrated")
     parser.add_argument("--gender", choices=("female", "male"))
-    parser.add_argument("--provider", choices=("fish", "elevenlabs", "edge"), default="fish")
+    parser.add_argument("--provider", choices=("kokoro",), default="kokoro")
     args = parser.parse_args()
     if not 1 <= len(args.topic.strip()) <= 1000:
         parser.error("Topic must contain 1 to 1,000 characters.")

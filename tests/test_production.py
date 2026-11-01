@@ -78,6 +78,14 @@ class ProductionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "never both"):
             p.load_config(path)
 
+    def test_only_the_local_kokoro_voice_provider_is_accepted(self):
+        for provider in ("fish", "elevenlabs", "edge"):
+            with self.subTest(provider=provider):
+                path = self.root / "provider.json"
+                path.write_text(json.dumps(self.config | {"tts_provider": provider}))
+                with self.assertRaisesRegex(ValueError, "kokoro"):
+                    p.load_config(path)
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -105,7 +113,6 @@ class ProductionTests(unittest.TestCase):
             minimum_scheduled_videos=0,  # Existing transition tests isolate the reserve policy.
             lookahead_hours=36,
             max_jobs_per_pass=1,
-            fish_free_until="2099-12-31",
             footage_discovery="fixed",
         )
         cache_patch = patch(
@@ -484,12 +491,10 @@ class ProductionTests(unittest.TestCase):
         self.assertIn("Missed publishing slot", self.queue.get(first["id"])["error"])
         upload.assert_not_called()
 
-    def test_quota_expiry_disk_and_pause_prevent_generation(self):
-        for mode in ("expired", "disk", "paused"):
+    def test_disk_and_pause_prevent_generation(self):
+        for mode in ("disk", "paused"):
             with self.subTest(mode=mode):
-                self.config.update(enabled=True, fish_free_until="2099-12-31", min_free_disk_gb=5)
-                if mode == "expired":
-                    self.config["fish_free_until"] = "2000-01-01"
+                self.config.update(enabled=True, min_free_disk_gb=5)
                 if mode == "paused":
                     self.config["enabled"] = False
                 with patch("shorts_automation.automation.production.shutil.disk_usage") as disk:
@@ -546,7 +551,7 @@ class ProductionTests(unittest.TestCase):
         video.write_bytes(b"fake video; ffmpeg mocked")
         metadata = {
             "story": {"title": "The Room Behind My Door", "script": " ".join(["word"] * 130)},
-            "tts_provider": "fish",
+            "tts_provider": "kokoro",
             "narration_duration": 49.2,
             "background_source": {
                 "title": "File:Minetest gameplay.webm",
@@ -558,7 +563,7 @@ class ProductionTests(unittest.TestCase):
         }
         video.with_suffix(".metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
         video.with_suffix(".credits.txt").write_text("Creator and license", encoding="utf-8")
-        job = {"output": str(video), "tts_provider": "fish"}
+        job = {"output": str(video), "tts_provider": "kokoro"}
         probe = {
             "streams": [
                 {"codec_type": "video", "width": 1080, "height": 1920},
@@ -585,7 +590,7 @@ class ProductionTests(unittest.TestCase):
                 "title": "The Voice Behind My Door",
                 "script": "It answered before I knocked.",
             },
-            "tts_provider": "fish",
+            "tts_provider": "kokoro",
             "background_source": {
                 "title": "Minecraft Parkour",
                 "license": "Creator commercial permission",
@@ -613,14 +618,14 @@ class ProductionTests(unittest.TestCase):
                     run.return_value.stdout = json.dumps(probe)
                     if 0.8 < duration <= 58:
                         p.validate_output(
-                            {"output": str(video), "tts_provider": "fish"},
+                            {"output": str(video), "tts_provider": "kokoro"},
                             {"Creator commercial permission"},
                         )
                         self.assertEqual(run.call_count, 2)
                     else:
                         with self.assertRaises(ValueError):
                             p.validate_output(
-                                {"output": str(video), "tts_provider": "fish"},
+                                {"output": str(video), "tts_provider": "kokoro"},
                                 {"Creator commercial permission"},
                             )
 
@@ -636,7 +641,7 @@ class ProductionTests(unittest.TestCase):
         ):
             with self.assertRaises(RuntimeError):
                 p.render_automatic(
-                    self.config, story_file=self.root / "story.json", tts_provider="fish"
+                    self.config, story_file=self.root / "story.json", tts_provider="kokoro"
                 )
             renderer.assert_not_called()
         with (
@@ -650,9 +655,9 @@ class ProductionTests(unittest.TestCase):
                 json.dumps({"title": "NodeCore gameplay"}), encoding="utf-8"
             )
             p.render_automatic(
-                self.config, story_file=self.root / "story.json", tts_provider="fish"
+                self.config, story_file=self.root / "story.json", tts_provider="kokoro"
             )
-            self.assertEqual(renderer.call_args.kwargs["tts_provider"], "fish")
+            self.assertEqual(renderer.call_args.kwargs["tts_provider"], "kokoro")
 
     def test_antigravity_queries_feed_real_worker_sourcing(self):
         self.config["footage_discovery"] = "antigravity"
@@ -670,7 +675,7 @@ class ProductionTests(unittest.TestCase):
             patch("shorts_automation.rendering.pipeline.run_pipeline"),
         ):
             p.render_automatic(
-                self.config, story_file=self.root / "story.json", tts_provider="fish"
+                self.config, story_file=self.root / "story.json", tts_provider="kokoro"
             )
         agy.assert_called_once()
         self.assertEqual(source.call_args.args[1], "AGY gameplay query")
@@ -686,7 +691,7 @@ class ProductionTests(unittest.TestCase):
             patch("shorts_automation.rendering.pipeline.run_pipeline") as render,
         ):
             p.render_automatic(
-                self.config, story_file=self.root / "story.json", tts_provider="fish"
+                self.config, story_file=self.root / "story.json", tts_provider="kokoro"
             )
         agy.assert_not_called()
         self.assertEqual(render.call_args.kwargs["background_file"], self.root / "stock.mp4")

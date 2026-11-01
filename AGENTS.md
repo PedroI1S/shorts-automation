@@ -25,8 +25,11 @@ Use current guides in docs/; docs/history/ preserves superseded session notes.
 - Keep Windows on the Ryzen 5 4600G / integrated graphics / 16 GB PC.
 - Use APIs/existing subscription allowances for AI and local FFmpeg rendering.
 - Free services only: no purchases, upgrades or silent paid fallbacks.
-- Keep Fish Audio and ElevenLabs available. Preserve the chosen Fish voice,
-  synchronized captions and moving yellow word highlight.
+- Narration is local Kokoro-82M only (user decision, 2026-11-01): Fish Audio,
+  ElevenLabs and Edge were removed and their credentials deleted. Kokoro runs on
+  the CPU in .venv-kokoro (Python 3.12). Voices live in config.KOKORO_VOICES
+  (am_fenrir male narrator, af_heart female narrator; the rest give chat contacts
+  distinct voices). Preserve synchronized captions and the moving yellow word highlight.
 - Three daily English Shorts target 07:00, 12:00 and 19:00 America/New_York.
 - Maintain at least three confirmed future public releases. Replenish toward four
   to keep one extra above that minimum; count future scheduled uploads, not drafts

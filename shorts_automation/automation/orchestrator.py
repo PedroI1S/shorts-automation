@@ -108,13 +108,20 @@ class JobQueue:
             raise ValueError("A story or series identity is required.")
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            db.execute("CREATE TABLE IF NOT EXISTS protagonist_assignments (kind TEXT NOT NULL, identity TEXT NOT NULL, gender TEXT NOT NULL, PRIMARY KEY(kind, identity))")
-            row = db.execute("SELECT gender FROM protagonist_assignments WHERE kind=? AND identity=?", (kind, identity)).fetchone()
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS protagonist_assignments (kind TEXT NOT NULL, identity TEXT NOT NULL, gender TEXT NOT NULL, PRIMARY KEY(kind, identity))"
+            )
+            row = db.execute(
+                "SELECT gender FROM protagonist_assignments WHERE kind=? AND identity=?",
+                (kind, identity),
+            ).fetchone()
             if row:
                 return row[0]
             count = db.execute("SELECT COUNT(*) FROM protagonist_assignments").fetchone()[0]
             gender = "male" if count % 2 == 0 else "female"
-            db.execute("INSERT INTO protagonist_assignments VALUES (?,?,?)", (kind, identity, gender))
+            db.execute(
+                "INSERT INTO protagonist_assignments VALUES (?,?,?)", (kind, identity, gender)
+            )
             return gender
 
     @contextmanager
@@ -159,7 +166,7 @@ class JobQueue:
             ).fetchall()
 
     # ---- transitions ---------------------------------------------------
-    def enqueue(self, topic, tts_provider="fish", gameplay_query=None, background_file=None):
+    def enqueue(self, topic, tts_provider="kokoro", gameplay_query=None, background_file=None):
         topic = " ".join((topic or "").split())
         if not 1 <= len(topic) <= 1000:
             raise ValueError("Topic must contain 1 to 1,000 characters.")
@@ -510,7 +517,9 @@ def _draft(queue, job, drafter, series_drafter=None):
             return series_queue.draft_job(queue, job, series_drafter)
         path = drafter(job["topic"], gender=queue.assign_gender("story", job["id"]))
         story = _read_story(path)  # Never advance an unreadable or out-of-range draft.
-        if story.get("protagonist_gender") != queue.assign_gender("story", job["id"]) or story.get("narrator_gender") != story.get("protagonist_gender"):
+        if story.get("protagonist_gender") != queue.assign_gender("story", job["id"]) or story.get(
+            "narrator_gender"
+        ) != story.get("protagonist_gender"):
             raise ValueError("Draft did not respect assigned protagonist gender.")
     except Exception as error:
         return queue.fail_attempt(job, "queued", error)
@@ -648,7 +657,7 @@ def main(argv=None):
     group = p.add_mutually_exclusive_group(required=True)
     group.add_argument("--topic")
     group.add_argument("--topics-file", type=Path, help="UTF-8 text file, one premise per line.")
-    p.add_argument("--provider", choices=sorted(SPEECH_WORDS_PER_SECOND), default="fish")
+    p.add_argument("--provider", choices=sorted(SPEECH_WORDS_PER_SECOND), default="kokoro")
     p.add_argument("--gameplay", help="Commons search query for background footage.")
     p.add_argument("--background-file", type=Path, help="Owned/licensed local footage.")
     p = sub.add_parser("run", help="Draft and render queued jobs, then stop at review.")
