@@ -3,7 +3,7 @@ import json
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -154,21 +154,52 @@ class SeriesProductionTests(unittest.TestCase):
 
     def test_unconfirmed_standalones_do_not_count_toward_spacing(self):
         rows = self.seed()
-        self.queue.move(rows[2]["id"], ("scheduled",), "rendered", youtube_id=None, scheduled_at=None)
+        self.queue.move(
+            rows[2]["id"], ("scheduled",), "rendered", youtube_id=None, scheduled_at=None
+        )
         self.config["minimum_scheduled_videos"] = 2
         self.assertIsNone(p.assign_series(self.queue, self.config, self.now))
 
-    def test_failed_or_uncertain_arc_blocks_later_standalone_upload(self):
+    def test_uncertain_open_arc_holds_later_standalone_upload(self):
         rows = self.seed()
         series_queue.link(self.queue, [row["id"] for row in rows[3:6]])
-        self.queue.move(rows[6]["id"], ("queued",), "rendered")
-        for stage in ("failed", "upload_uncertain"):
-            with self.subTest(stage=stage):
-                self.queue.move(rows[4]["id"], ("queued", "failed"), stage)
-                with patch("shorts_automation.publishing.youtube_uploader.upload_video") as upload:
-                    self.cycle()
-                    upload.assert_not_called()
-                self.assertEqual(self.queue.get(rows[6]["id"])["stage"], "rendered")
+        self.queue.move(rows[4]["id"], ("queued",), "upload_uncertain")
+        with patch("shorts_automation.publishing.youtube_uploader.upload_video") as upload:
+            self.cycle()
+            upload.assert_not_called()
+        self.assertEqual(self.queue.get(rows[6]["id"])["stage"], "rendered")
+
+    def test_failed_arc_releases_later_standalones_without_publishing_its_parts(self):
+        rows = self.seed()
+        identity = series_queue.link(self.queue, [row["id"] for row in rows[3:6]])
+        self.queue.move(rows[4]["id"], ("queued",), "failed")
+        with patch(
+            "shorts_automation.publishing.youtube_uploader.upload_video",
+            return_value={"id": "standalone1"},
+        ) as upload:
+            self.cycle()
+        upload.assert_called_once()
+        self.assertEqual(self.queue.get(rows[6]["id"])["stage"], "scheduled")
+        self.assertEqual(
+            [row["stage"] for row in series_queue.members(self.queue, identity)],
+            ["queued", "failed", "queued"],
+        )
+
+    def test_past_unresolved_arc_does_not_stall_later_releases(self):
+        rows = self.seed()
+        series_queue.link(self.queue, [row["id"] for row in rows[3:6]])
+        self.queue.move(rows[4]["id"], ("queued",), "needs_attention")
+        self.now = datetime.fromisoformat(rows[5]["publish_at"].replace("Z", "+00:00")) + (
+            timedelta(hours=1)
+        )
+        with patch(
+            "shorts_automation.publishing.youtube_uploader.upload_video",
+            return_value={"id": "standalone1"},
+        ) as upload:
+            result = self.cycle()
+        upload.assert_called_once()
+        self.assertEqual(result["scheduled_buffer"]["future_scheduled"], 1)
+        self.assertEqual(self.queue.get(rows[4]["id"])["stage"], "needs_attention")
 
     def test_upload_failure_stops_continuations_and_keeps_uncertain_outcome(self):
         self.seed()

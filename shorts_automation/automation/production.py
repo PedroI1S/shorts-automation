@@ -266,6 +266,24 @@ def owned_jobs(queue):
         ).fetchall()
 
 
+def holds_releases(queue, series, slots, now):
+    """Whether a blocked arc still keeps later jobs waiting behind it.
+
+    Only an open arc can still release in order. Past arcs and arcs with a failed or
+    rejected part never can, so they must not stall every later release.
+    """
+    rows = series_queue.members(queue, series["id"])
+    if any(row["stage"] in ("failed", "rejected") for row in rows):
+        return False
+    if not any(
+        datetime.fromisoformat(slots[row["id"]].replace("Z", "+00:00")) > now
+        for row in rows
+        if row["id"] in slots
+    ):
+        return False
+    return any(row["stage"] in series_queue.BLOCKING for row in rows)
+
+
 def assign_series(queue, config, now):
     """Mix one coherent arc into untouched consecutive slots after standalone releases."""
     if config.get("story_format") != "mixed" or not config["publish_enabled"]:
@@ -279,12 +297,10 @@ def assign_series(queue, config, now):
         ) < now + timedelta(hours=config.get("series_min_lead_hours", 4)):
             return None
     rows = owned_jobs(queue)
+    slots = {row["id"]: row["publish_at"] for row in rows}
     for row in rows:
         series = series_queue.info(queue, row["id"])
-        if series and any(
-            member["stage"] in series_queue.BLOCKING
-            for member in series_queue.members(queue, series["id"])
-        ):
+        if series and holds_releases(queue, series, slots, now):
             return None
     candidates = [
         row
@@ -716,13 +732,18 @@ def cycle(
     def advance_ready():
         nonlocal youtube
         visited_series = set()
-        for job in owned_jobs(queue):
+        jobs = owned_jobs(queue)
+        slots = {row["id"]: row["publish_at"] for row in jobs}
+        for job in jobs:
             series = series_queue.info(queue, job["id"])
+            if series and holds_releases(queue, series, slots, clock()):
+                break
             if series and any(
                 row["stage"] in series_queue.BLOCKING
                 for row in series_queue.members(queue, series["id"])
             ):
-                break
+                # A past or failed arc can no longer release; its parts stay unpublished.
+                continue
             if series:
                 if series["id"] not in visited_series:
                     advance_series(series)
