@@ -135,7 +135,9 @@ def save_series(data, identity, directory=None, topic=""):
     return target / "manifest.json"
 
 
-def draft_series(topic, parts=3, identity=None, directory=None):
+def draft_series(topic, parts=3, identity=None, directory=None, gender=None):
+    if gender not in (None, "male", "female"):
+        raise ValueError("Invalid assigned gender.")
     if not isinstance(topic, str) or not 1 <= len(topic.strip()) <= 1000:
         raise ValueError("Topic must contain 1 to 1,000 characters.")
     if type(parts) is not int or parts not in (3, 4):
@@ -149,7 +151,9 @@ def draft_series(topic, parts=3, identity=None, directory=None):
         / "manifest.json"
     )
     if destination.exists():
-        read_manifest(destination, identity, parts, topic)
+        existing = read_manifest(destination, identity, parts, topic)
+        if gender and existing["protagonist_gender"] != gender:
+            raise ValueError("Existing series conflicts with assigned gender.")
         return destination
     brief = (BASE_DIR / "prompts/story_horror_series.md").read_text(encoding="utf-8")
     schema = (
@@ -163,8 +167,14 @@ def draft_series(topic, parts=3, identity=None, directory=None):
         + json.dumps(topic)
     )
 
+    if gender:
+        schema += f" Assigned protagonist and narrator gender: {gender}; both fields must be {gender}."
+
     def validator(data):
-        return validate_series(data, parts)
+        result = validate_series(data, parts)
+        if gender and result["protagonist_gender"] != gender:
+            raise ValueError("Series did not respect assigned protagonist gender.")
+        return result
 
     candidate = validator(query_hermes(brief + "\n" + schema, validator=validator))
     final = validator(

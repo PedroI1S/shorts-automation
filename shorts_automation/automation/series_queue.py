@@ -110,10 +110,13 @@ def draft_job(queue, job, drafter):
         )
     if series["part"] != 1:
         raise ValueError("Draft Part 1's complete arc before processing a continuation.")
+    gender = queue.assign_gender("series", series["id"])
     path = Path(
-        drafter(series["topic"], parts=series["part_count"], identity=series["id"])
+        drafter(series["topic"], parts=series["part_count"], identity=series["id"], gender=gender)
     ).resolve()
     manifest = read_manifest(path, series["id"], series["part_count"], series["topic"])
+    if manifest["protagonist_gender"] != gender:
+        raise ValueError("Series did not respect assigned protagonist gender.")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with queue.connect() as db:
         db.execute("BEGIN IMMEDIATE")

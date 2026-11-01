@@ -34,21 +34,23 @@ class SeriesHarness:
         self.render_error = None
         self.fail_part = None
 
-    def drafter(self, topic):
+    def drafter(self, topic, *, gender):
         path = self.root / f"standalone_{uuid4().hex}.json"
         path.write_text(
             json.dumps(
                 {
                     "title": "The Knocking Behind My Door",
+                    "protagonist_gender": gender,
+                    "narrator_gender": gender,
                     "script": f"I heard {uuid4().hex} knocking. It came from inside my locked suitcase.",
                 }
             )
         )
         return path
 
-    def series_drafter(self, topic, *, parts, identity):
+    def series_drafter(self, topic, *, parts, identity, gender):
         self.drafts.append((topic, parts, identity))
-        return save_series(arc(parts, token=identity), identity, self.root / "series", topic)
+        return save_series(arc(parts, gender=gender, token=identity), identity, self.root / "series", topic)
 
     def renderer(self, story_file, **kwargs):
         story = validate_story(json.loads(Path(story_file).read_text()))

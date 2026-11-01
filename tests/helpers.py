@@ -14,14 +14,14 @@ class Harness:
         self.draft_error = self.render_error = None
         self.words = 130
 
-    def drafter(self, topic):
+    def drafter(self, topic, *, gender="male"):
         self.drafts.append(topic)
         if self.draft_error:
             raise self.draft_error
         path = self.root / f"story_{uuid4().hex}.json"
         # Unique text per draft so story fingerprints never collide by accident.
         script = " ".join([uuid4().hex[:6]] + ["word"] * (self.words - 1))
-        path.write_text(json.dumps({"title": "The Voice Behind The Door", "script": script}))
+        path.write_text(json.dumps({"title": "The Voice Behind The Door", "script": script, "protagonist_gender": gender, "narrator_gender": gender}))
         return path
 
     def renderer(self, story_file, **kwargs):

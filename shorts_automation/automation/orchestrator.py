@@ -101,6 +101,21 @@ class JobQueue:
                 db.execute("ALTER TABLE queue_jobs ADD COLUMN upload_mode TEXT")
             db.executescript(series_queue.SCHEMA)
 
+    def assign_gender(self, kind, identity):
+        """Reserve one alternating assignment per story or complete arc."""
+        if kind not in ("story", "series") or not identity:
+            raise ValueError("A story or series identity is required.")
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("CREATE TABLE IF NOT EXISTS protagonist_assignments (kind TEXT NOT NULL, identity TEXT NOT NULL, gender TEXT NOT NULL, PRIMARY KEY(kind, identity))")
+            row = db.execute("SELECT gender FROM protagonist_assignments WHERE kind=? AND identity=?", (kind, identity)).fetchone()
+            if row:
+                return row[0]
+            count = db.execute("SELECT COUNT(*) FROM protagonist_assignments").fetchone()[0]
+            gender = "male" if count % 2 == 0 else "female"
+            db.execute("INSERT INTO protagonist_assignments VALUES (?,?,?)", (kind, identity, gender))
+            return gender
+
     @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=30)
@@ -492,8 +507,10 @@ def _draft(queue, job, drafter, series_drafter=None):
             if series_drafter is None:
                 from shorts_automation.stories.series_story import draft_series as series_drafter
             return series_queue.draft_job(queue, job, series_drafter)
-        path = drafter(job["topic"])
-        _read_story(path)  # Never advance an unreadable or out-of-range draft.
+        path = drafter(job["topic"], gender=queue.assign_gender("story", job["id"]))
+        story = _read_story(path)  # Never advance an unreadable or out-of-range draft.
+        if story.get("protagonist_gender") != queue.assign_gender("story", job["id"]) or story.get("narrator_gender") != story.get("protagonist_gender"):
+            raise ValueError("Draft did not respect assigned protagonist gender.")
     except Exception as error:
         return queue.fail_attempt(job, "queued", error)
     return queue.move(

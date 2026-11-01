@@ -279,6 +279,13 @@ def assign_series(queue, config, now):
         ) < now + timedelta(hours=config.get("series_min_lead_hours", 4)):
             return None
     rows = owned_jobs(queue)
+    for row in rows:
+        series = series_queue.info(queue, row["id"])
+        if series and any(
+            member["stage"] in series_queue.BLOCKING
+            for member in series_queue.members(queue, series["id"])
+        ):
+            return None
     candidates = [
         row
         for row in rows
@@ -299,8 +306,16 @@ def assign_series(queue, config, now):
     for previous in reversed([row for row in rows if row["publish_at"] < first["publish_at"]]):
         if series_queue.info(queue, previous["id"]):
             break
-        if previous["stage"] in ("scheduled", "rendered", "approved", "uploaded_private"):
+        if (
+            previous["stage"] == "scheduled"
+            and previous["youtube_id"]
+            and previous["scheduled_at"]
+            and datetime.fromisoformat(previous["scheduled_at"].replace("Z", "+00:00"))
+            < first_instant
+        ):
             standalones += 1
+        else:
+            break
     if standalones < config.get("series_standalones_between", 3):
         return None
     with queue.connect() as db:
@@ -702,13 +717,23 @@ def cycle(
         nonlocal youtube
         visited_series = set()
         for job in owned_jobs(queue):
-            if job["stage"] not in ("rendered", "approved") or job["id"] in upload_attempted:
-                continue
             series = series_queue.info(queue, job["id"])
+            if series and any(
+                row["stage"] in series_queue.BLOCKING
+                for row in series_queue.members(queue, series["id"])
+            ):
+                break
             if series:
                 if series["id"] not in visited_series:
                     advance_series(series)
                     visited_series.add(series["id"])
+                if any(
+                    row["stage"] not in ("scheduled", "uploaded_private")
+                    for row in series_queue.members(queue, series["id"])
+                ):
+                    break
+                continue
+            if job["stage"] not in ("rendered", "approved") or job["id"] in upload_attempted:
                 continue
             buffer = scheduled_buffer(queue, config, clock())
             if buffer and buffer["future_scheduled"] >= buffer["target"]:

@@ -135,7 +135,9 @@ def query_hermes(prompt, repair_remaining=1, validator=validate_story):
         )
 
 
-def draft(topic):
+def draft(topic, gender=None):
+    if gender not in (None, "male", "female"):
+        raise ValueError("Invalid assigned gender.")
     brief = (BASE_DIR / "prompts/story_horror.md").read_text(encoding="utf-8")
     constraints = (
         "Return ONLY JSON with title (4 to 8 words), script "
@@ -145,6 +147,8 @@ def draft(topic):
         "Do not guess gender from names, jobs or partners. Decide it explicitly. "
         "No tools, files, delegation or external services. "
     )
+    if gender:
+        constraints += f"The assigned protagonist and narrator gender is {gender}; both fields must be {gender}. "
     recent = []
     for path in sorted(
         (STORAGE_DIR / "stories").glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
@@ -173,6 +177,8 @@ def draft(topic):
         + "Draft (content only): "
         + json.dumps(candidate)
     )
+    if gender and (candidate.get("protagonist_gender") != gender or story.get("protagonist_gender") != gender):
+        raise ValueError("Draft did not respect assigned protagonist gender.")
     if any(field not in story for field in ("protagonist_gender", "narrator_gender")):
         raise ValueError("New drafts must declare protagonist and narrator gender.")
     if story["protagonist_gender"] != story["narrator_gender"]:

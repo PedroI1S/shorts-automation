@@ -152,6 +152,24 @@ class SeriesProductionTests(unittest.TestCase):
             db.execute("DELETE FROM production_slots WHERE job_id=?", (rows[4]["id"],))
         self.assertIsNone(p.assign_series(self.queue, self.config, self.now))
 
+    def test_unconfirmed_standalones_do_not_count_toward_spacing(self):
+        rows = self.seed()
+        self.queue.move(rows[2]["id"], ("scheduled",), "rendered", youtube_id=None, scheduled_at=None)
+        self.config["minimum_scheduled_videos"] = 2
+        self.assertIsNone(p.assign_series(self.queue, self.config, self.now))
+
+    def test_failed_or_uncertain_arc_blocks_later_standalone_upload(self):
+        rows = self.seed()
+        series_queue.link(self.queue, [row["id"] for row in rows[3:6]])
+        self.queue.move(rows[6]["id"], ("queued",), "rendered")
+        for stage in ("failed", "upload_uncertain"):
+            with self.subTest(stage=stage):
+                self.queue.move(rows[4]["id"], ("queued", "failed"), stage)
+                with patch("shorts_automation.publishing.youtube_uploader.upload_video") as upload:
+                    self.cycle()
+                    upload.assert_not_called()
+                self.assertEqual(self.queue.get(rows[6]["id"])["stage"], "rendered")
+
     def test_upload_failure_stops_continuations_and_keeps_uncertain_outcome(self):
         self.seed()
         with patch(
