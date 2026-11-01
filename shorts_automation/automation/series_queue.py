@@ -13,13 +13,22 @@ SCHEMA = """
     CREATE TABLE IF NOT EXISTS story_series (
         id TEXT PRIMARY KEY, topic TEXT NOT NULL, tts_provider TEXT NOT NULL,
         part_count INTEGER NOT NULL CHECK (part_count IN (3,4)),
-        title TEXT, manifest_path TEXT, created_at TEXT NOT NULL);
+        title TEXT, manifest_path TEXT, created_at TEXT NOT NULL,
+        format TEXT NOT NULL DEFAULT 'narrated');
     CREATE TABLE IF NOT EXISTS series_episodes (
         job_id TEXT PRIMARY KEY REFERENCES queue_jobs(id),
         series_id TEXT NOT NULL REFERENCES story_series(id),
         part INTEGER NOT NULL CHECK (part BETWEEN 1 AND 4),
         UNIQUE (series_id, part));
 """
+
+
+def migrate(db):
+    """Arcs created before chat support are narrated."""
+    if "format" not in {r[1] for r in db.execute("PRAGMA table_info(story_series)")}:
+        db.execute("ALTER TABLE story_series ADD COLUMN format TEXT NOT NULL DEFAULT 'narrated'")
+
+
 BLOCKING = {"failed", "needs_attention", "rejected", "uploading", "upload_uncertain"}
 
 
@@ -44,10 +53,12 @@ def _members(db, identity):
     ).fetchall()
 
 
-def link(queue, jobs):
+def link(queue, jobs, story_format="narrated", topic=None):
     """Bind untouched queued jobs in one transaction; keep their original topics in events."""
     if len(jobs) not in (3, 4) or len(set(jobs)) != len(jobs):
         raise ValueError("A series needs 3 or 4 distinct queued jobs.")
+    if story_format not in ("narrated", "chat"):
+        raise ValueError("A series is narrated or chat.")
     identity, now = uuid4().hex, datetime.now(timezone.utc).isoformat(timespec="seconds")
     with queue.connect() as db:
         db.execute("BEGIN IMMEDIATE")
@@ -70,10 +81,11 @@ def link(queue, jobs):
             for job in jobs
         ):
             raise ValueError("Job already belongs to a series.")
-        topic = rows[0]["topic"]
+        topic = topic or rows[0]["topic"]
         db.execute(
-            "INSERT INTO story_series (id,topic,tts_provider,part_count,created_at) VALUES (?,?,?,?,?)",
-            (identity, topic, rows[0]["tts_provider"], len(jobs), now),
+            "INSERT INTO story_series (id,topic,tts_provider,part_count,created_at,format) "
+            "VALUES (?,?,?,?,?,?)",
+            (identity, topic, rows[0]["tts_provider"], len(jobs), now, story_format),
         )
         for part, row in enumerate(rows, 1):
             db.execute("INSERT INTO series_episodes VALUES (?,?,?)", (row["id"], identity, part))
@@ -84,7 +96,8 @@ def link(queue, jobs):
                 db,
                 row["id"],
                 "queued",
-                f"series {identity} part {part}/{len(jobs)}; original premise: {row['topic']}",
+                f"{story_format} series {identity} part {part}/{len(jobs)}; "
+                f"original premise: {row['topic']}",
             )
     return identity
 
@@ -98,7 +111,9 @@ def draft_job(queue, job, drafter):
     series = info(queue, job["id"])
     if series["manifest_path"]:
         manifest_path = Path(series["manifest_path"])
-        read_manifest(manifest_path, series["id"], series["part_count"], series["topic"])
+        manifest = read_manifest(manifest_path, series["id"], series["part_count"], series["topic"])
+        if manifest["format"] != series["format"]:
+            raise ValueError("Saved series format differs from its queue reservation.")
         path = manifest_path.parent / f"part_{series['part']:02d}.json"
         return queue.move(
             job["id"],
@@ -112,11 +127,20 @@ def draft_job(queue, job, drafter):
         raise ValueError("Draft Part 1's complete arc before processing a continuation.")
     gender = queue.assign_gender("series", series["id"])
     path = Path(
-        drafter(series["topic"], parts=series["part_count"], identity=series["id"], gender=gender)
+        drafter(
+            series["topic"],
+            parts=series["part_count"],
+            identity=series["id"],
+            gender=gender,
+            story_format=series["format"],
+            provider=series["tts_provider"],
+        )
     ).resolve()
     manifest = read_manifest(path, series["id"], series["part_count"], series["topic"])
     if manifest["protagonist_gender"] != gender:
         raise ValueError("Series did not respect assigned protagonist gender.")
+    if manifest["format"] != series["format"]:
+        raise ValueError("Series did not respect its assigned format.")
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     with queue.connect() as db:
         db.execute("BEGIN IMMEDIATE")

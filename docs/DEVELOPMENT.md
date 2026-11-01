@@ -25,9 +25,9 @@ settings/credentials in secrets/. Other Python CLIs use `python -m <package.modu
 | Stage or tool | Source files |
 | --- | --- |
 | `shorts_automation/automation/` | `production.py` coordinates automatic work; `orchestrator.py` owns queue/review/upload reservations; `series_queue.py` admits whole arcs and enforces order |
-| `shorts_automation/stories/` | `draft_story.py` drafts/edits standalones; `series_story.py` plans/edits complete arcs; `tts_engine.py` handles voice selection, providers and timestamps |
+| `shorts_automation/stories/` | `draft_story.py` drafts/edits standalones; `series_story.py` plans/edits complete narrated or chat arcs; `tts_engine.py` handles voice selection, providers and timestamps |
 | `shorts_automation/footage/` | `agy_footage_research.py`, `creator_evidence.py`, `creator_footage.py`, `gameplay_fetcher.py` handle discovery, evidence, imports and probes |
-| `shorts_automation/rendering/` | `pipeline.py`, `subtitle_engine.py`, `video_compiler.py`, `speech_preview.py` handle assembly, captions and previews |
+| `shorts_automation/rendering/` | `pipeline.py`, `subtitle_engine.py`, `chat_overlay.py`, `video_compiler.py`, `speech_preview.py` handle assembly, captions, chat-thread overlays and previews |
 | `shorts_automation/publishing/` | `youtube_uploader.py`, `youtube_reauthorize.py`, `telegram_notifier.py` handle uploads, credentials and notifications |
 | `shorts_automation/state/` | `usage_store.py` and `source_lock.py` retain usage history and coordinate access |
 | Root | `production.py`, `orchestrator.py`, `config.py`, `build_transfer_package.py` |

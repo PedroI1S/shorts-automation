@@ -7,11 +7,27 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from config import BASE_DIR, STORAGE_DIR, STORY_MAX_WORDS, STORY_PROMPT_MAX_WORDS
+from config import (
+    BASE_DIR,
+    CHAT_GAP_SECONDS,
+    CHAT_MAX_MESSAGE_WORDS,
+    CHAT_MAX_MESSAGES,
+    CHAT_MAX_WORDS,
+    CHAT_SWITCH_GAP_SECONDS,
+    MAX_DURATION_SECONDS,
+    NARRATION_TAIL_SECONDS,
+    SPEECH_WORDS_PER_SECOND,
+    STORAGE_DIR,
+    STORY_MAX_WORDS,
+    STORY_PROMPT_MAX_WORDS,
+)
+
+CHAT_REVISION = "chat-v1"
 
 
 def validate_series_info(data):
@@ -42,17 +58,117 @@ def validate_series_info(data):
     }
 
 
+def _chat_text(value, what):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{what} must be nonempty text.")
+    text = " ".join(value.split())
+    for char in text:
+        # Emoji and pictographs render as boxes in the bubble font and read badly aloud.
+        if unicodedata.category(char) in ("So", "Sk", "Cs", "Co", "Cn") or ord(char) > 0x2FFF:
+            raise ValueError(f"{what} contains an emoji or symbol; use plain words.")
+    if re.search(r"https?://|www\.|\d{7,}|@\w", text, re.IGNORECASE):
+        raise ValueError(f"{what} must not contain links, handles or phone numbers.")
+    return text
+
+
+def chat_gap(previous, current):
+    """Silence before a message: longer when the other person starts typing."""
+    return CHAT_SWITCH_GAP_SECONDS if previous["from"] != current["from"] else CHAT_GAP_SECONDS
+
+
+def validate_contacts(raw_contacts):
+    """The recurring cast the first-person protagonist ("me") texts with."""
+    contacts, names = [], set()
+    if not isinstance(raw_contacts, list) or not 1 <= len(raw_contacts) <= 3:
+        raise ValueError("Chat needs 1 to 3 recurring contacts.")
+    for contact in raw_contacts:
+        if not isinstance(contact, dict):
+            raise ValueError("Each contact must be an object.")
+        name = contact.get("name")
+        if (
+            not isinstance(name, str)
+            or not re.fullmatch(r"[A-Za-z][A-Za-z'\- ]{0,19}", name.strip())
+            or len(name.split()) > 2
+            or name.strip().casefold() in ("me", "i", "you")
+            or name.strip().casefold() in names
+        ):
+            raise ValueError("Contacts need distinct 1-2 word names (letters only, not Me).")
+        if contact.get("gender") not in ("female", "male"):
+            raise ValueError("Each contact needs an explicit female or male gender.")
+        names.add(name.strip().casefold())
+        contacts.append({"name": " ".join(name.split()), "gender": contact["gender"]})
+    return contacts
+
+
+def validate_chat(data):
+    """One text thread between the first-person protagonist ("me") and one contact."""
+    if not isinstance(data, dict):
+        raise ValueError("Chat must be an object.")
+    contacts = validate_contacts(data.get("contacts"))
+    thread = data.get("contact")
+    thread = " ".join(thread.split()).casefold() if isinstance(thread, str) else None
+    match = next((c["name"] for c in contacts if c["name"].casefold() == thread), None)
+    if not match:
+        raise ValueError("The thread contact must be one of the listed contacts.")
+    raw_messages = data.get("messages")
+    if not isinstance(raw_messages, list) or not 4 <= len(raw_messages) <= CHAT_MAX_MESSAGES:
+        raise ValueError(f"A chat needs 4 to {CHAT_MAX_MESSAGES} messages.")
+    messages = []
+    for message in raw_messages:
+        if not isinstance(message, dict):
+            raise ValueError("Each message must be an object.")
+        sender = message.get("from")
+        if isinstance(sender, str) and sender.strip().casefold() == "me":
+            sender = "me"
+        elif isinstance(sender, str) and " ".join(sender.split()).casefold() == match.casefold():
+            sender = match
+        else:
+            raise ValueError("Messages must come from me or the thread contact only.")
+        text = _chat_text(message.get("text"), "Message")
+        if len(text.split()) > CHAT_MAX_MESSAGE_WORDS:
+            raise ValueError(f"Messages must be at most {CHAT_MAX_MESSAGE_WORDS} words.")
+        messages.append({"from": sender, "text": text})
+    if {m["from"] for m in messages} != {"me", match}:
+        raise ValueError("Both people in the thread must send at least one message.")
+    words = sum(len(m["text"].split()) for m in messages)
+    if words > CHAT_MAX_WORDS:
+        raise ValueError(f"Chat messages must total at most {CHAT_MAX_WORDS} words.")
+    slowest = min(SPEECH_WORDS_PER_SECOND.values())
+    gaps = sum(chat_gap(a, b) for a, b in zip(messages, messages[1:]))
+    if words / slowest + gaps + NARRATION_TAIL_SECONDS > MAX_DURATION_SECONDS:
+        raise ValueError("Chat is too long to voice within the Short duration limit.")
+    return {"contacts": contacts, "contact": match, "messages": messages}
+
+
+def chat_script(chat):
+    """Plain transcript used for duplicate detection and descriptions."""
+    return " ".join(
+        f"{'Me' if m['from'] == 'me' else m['from']}: {m['text']}" for m in chat["messages"]
+    )
+
+
 def validate_story(data):
     if not isinstance(data, dict):
         raise ValueError("Story must be a JSON object.")
+    if data.get("format", "narrated") not in ("narrated", "chat"):
+        raise ValueError("Story format must be narrated or chat.")
+    if data.get("format") == "chat":
+        chat = validate_chat(data.get("chat"))
+        data = {**data, "script": chat_script(chat)}
     title, script = data.get("title"), data.get("script")
     if not isinstance(title, str) or not 4 <= len(title.split()) <= 8:
         raise ValueError("Title must contain 4 to 8 words.")
     if not isinstance(script, str) or not 1 <= len(script.split()) <= STORY_MAX_WORDS:
         raise ValueError(f"Narration must be nonempty and at most {STORY_MAX_WORDS} words.")
     story = {"title": title.strip(), "script": " ".join(script.split())}
-    if data.get("story_revision") == "horror-v2":
-        story["story_revision"] = "horror-v2"
+    if data.get("format") == "chat":
+        story.update(format="chat", chat=chat)
+        if data.get("protagonist_gender") not in ("female", "male") or data.get(
+            "narrator_gender"
+        ) != data.get("protagonist_gender"):
+            raise ValueError("A chat needs one explicit, matching protagonist/narrator gender.")
+    if data.get("story_revision") == (CHAT_REVISION if "chat" in story else "horror-v2"):
+        story["story_revision"] = data["story_revision"]
     for field in ("protagonist_gender", "narrator_gender"):
         if field in data:
             if data[field] not in ("female", "male", "unspecified"):

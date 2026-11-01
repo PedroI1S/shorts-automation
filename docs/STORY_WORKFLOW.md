@@ -47,10 +47,53 @@ Fresh narration consumes allowance. Source/story identity is reserved through
 SQLite, including for supplied footage. The automatic worker obtains creator
 footage before spending TTS allowance; see [footage research](FOOTAGE_RESEARCH.md).
 
+## Series-only production and chat arcs (2026-10-31)
+
+The user moved automatic production to series only, alternating arc formats.
+With `story_format="series"` in secrets/production.json, every new automatic
+release belongs to a 3/4-part arc, and `series_formats` (default
+`["narrated", "chat"]`) is cycled one arc at a time, continuing from the most
+recently created arc. No new standalone is drafted. Already drafted standalone
+jobs keep their slots and render normally. Slots too close to prepare a whole
+arc (`series_min_lead_hours`) are skipped instead of being filled with a
+standalone. Unlike mixed mode, a low reserve starts an arc immediately because
+there is no standalone fallback.
+
+Narrated arcs are the existing first-person horror format below. Chat arcs are
+first-person relationship drama (cheating, betrayal, revenge) from
+prompts/story_chat_series.md, using drama premises from production.py. Each
+part is one text thread between "me" (the protagonist) and one listed contact:
+
+- Drafting validates contacts (1-3, explicit gender), 4-18 messages, at most
+  30 words per message and 115 message words per part, no emoji, links,
+  handles or phone numbers, and a conservative duration estimate including
+  pauses. The same draft-then-editorial-rewrite flow and atomic bundle apply.
+- Every message is voiced separately with its sender's voice and joined with
+  0.25 s pauses (0.5 s when the other person answers). "Me" uses the normal
+  story voice for the protagonist's gender; each contact gets a distinct voice.
+  With only `voice_id` and `female_voice_id` configured, the drafter is told
+  that contacts must be the opposite gender. Optional
+  `chat_extra_voice_ids: {"female": [...], "male": [...]}` in the provider's
+  secrets file unlocks same-gender contacts. Voices are planned before any TTS
+  call; a missing voice stops the job without spending allowance.
+- The overlay (shorts_automation/rendering/chat_overlay.py) draws a generic
+  message card with the contact's initial and name. Each bubble appears when its
+  sender starts speaking, the spoken word gets the yellow highlight, a typing
+  indicator fills the pause before the contact replies, and older bubbles scroll
+  off. Part labels and continuation cues match narrated arcs.
+- The narration sidecar records `voice` as one identity string for the whole
+  cast (`chat:me=<voice>|<contact>=<voice>`), so series voice-consistency and
+  outdated-format checks work unchanged. Uploads use drama tags and hashtags.
+
+Draft a chat arc manually (spends model allowance only):
+`python -m shorts_automation.stories.series_story --format chat --gender female --topic "..."`.
+An offline preview, voiced with local stand-in voices, is in
+storage/reviews/chat_preview_20261031/.
+
 ## Stories across 3–4 Shorts
 
-The user selected a mix of series and standalone stories. In mixed mode, three
-standalone releases separate serial arcs. The worker prefers alternating 3- and
+Mixed mode (`story_format="mixed"`, superseded by series-only on 2026-10-31)
+remains available. There, three standalone releases separate serial arcs. The worker prefers alternating 3- and
 4-part arcs, using a supported length that fits consecutive free publishing slots.
 Each part uses one normal Short slot; the schedule stays 07:00, 12:00 and 19:00
 America/New_York. Already drafted, rendered and scheduled standalone jobs are retained.

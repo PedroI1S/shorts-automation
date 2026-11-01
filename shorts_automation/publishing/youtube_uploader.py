@@ -171,6 +171,7 @@ def build_short_metadata(video_path: Path):
     background_source = {}
     creator_credit = ""
     series = None
+    chat = False
     description_lines = []
     tags = ["shorts", "story", "thriller", "horror", "storytime", "mystery"]
 
@@ -179,6 +180,7 @@ def build_short_metadata(video_path: Path):
             data = json.loads(meta_path.read_text(encoding="utf-8"))
             story = data.get("story", {})
             series = story.get("series")
+            chat = story.get("format") == "chat"
             background_source = data.get("background_source", {})
             creator_credit = (background_source.get("credit_text") or "").strip()
             if story.get("title"):
@@ -206,9 +208,17 @@ def build_short_metadata(video_path: Path):
             description_lines.append(
                 f"Start with Part 1/{series['total']} of {series['title']} on this channel.\n"
             )
-        tags.append("horrorseries")
+        tags.append("dramaseries" if chat else "horrorseries")
 
-    description_lines.append("#shorts #storytime #mystery #ruleshorror #thriller\n")
+    if chat:
+        tags = [
+            *(t for t in tags if t not in ("thriller", "horror", "mystery")),
+            "drama",
+            "textstory",
+        ]
+        description_lines.append("#shorts #textstory #storytime #drama #relationships\n")
+    else:
+        description_lines.append("#shorts #storytime #mystery #ruleshorror #thriller\n")
     description_lines.append("Original fictional story with AI-generated narration.\n")
 
     credits_text = ""

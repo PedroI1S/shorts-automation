@@ -100,6 +100,7 @@ class JobQueue:
             if "upload_mode" not in {r[1] for r in db.execute("PRAGMA table_info(queue_jobs)")}:
                 db.execute("ALTER TABLE queue_jobs ADD COLUMN upload_mode TEXT")
             db.executescript(series_queue.SCHEMA)
+            series_queue.migrate(db)
 
     def assign_gender(self, kind, identity):
         """Reserve one alternating assignment per story or complete arc."""

@@ -27,6 +27,39 @@ def get_font(size: int = SUBTITLE_FONT_SIZE) -> ImageFont.FreeTypeFont:
         return ImageFont.load_default()
 
 
+def draw_label(draw: ImageDraw.ImageDraw, label: str, y: int):
+    """Centered dark pill used for part labels and continuation cues."""
+    label_font = get_font(44)
+    bounds = draw.textbbox((0, 0), label, font=label_font, stroke_width=2)
+    width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+    left = (VIDEO_WIDTH - width) // 2
+    draw.rounded_rectangle(
+        (left - 22, y - 12, left + width + 22, y + height + 20), radius=16, fill=(0, 0, 0, 210)
+    )
+    draw.text(
+        (left, y),
+        label,
+        font=label_font,
+        fill=SUBTITLE_PRIMARY_COLOR,
+        stroke_width=2,
+        stroke_fill=SUBTITLE_STROKE_COLOR,
+    )
+
+
+def write_concat(entries: list[tuple[Path, float]], concat_file: Path) -> Path:
+    """Write an ffconcat script of overlay images with absolute durations."""
+
+    def quote(path):
+        return str(path.resolve()).replace("'", "'\\''")
+
+    with concat_file.open("w") as stream:
+        stream.write("ffconcat version 1.0\n")
+        for path, duration in entries:
+            stream.write(f"file '{quote(path)}'\noption framerate 1000\nduration {duration:.6f}\n")
+        stream.write(f"file '{quote(entries[-1][0])}'\noption framerate 1000\n")
+    return concat_file
+
+
 def create_subtitle_image(
     text: str,
     output_path: Path,
@@ -41,23 +74,8 @@ def create_subtitle_image(
     draw = ImageDraw.Draw(img)
     font = get_font(SUBTITLE_FONT_SIZE)
     for label, y in ((part_label, 300), (continuation, 1450)):
-        if not label:
-            continue
-        label_font = get_font(44)
-        bounds = draw.textbbox((0, 0), label, font=label_font, stroke_width=2)
-        width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
-        left = (VIDEO_WIDTH - width) // 2
-        draw.rounded_rectangle(
-            (left - 22, y - 12, left + width + 22, y + height + 20), radius=16, fill=(0, 0, 0, 210)
-        )
-        draw.text(
-            (left, y),
-            label,
-            font=label_font,
-            fill=SUBTITLE_PRIMARY_COLOR,
-            stroke_width=2,
-            stroke_fill=SUBTITLE_STROKE_COLOR,
-        )
+        if label:
+            draw_label(draw, label, y)
 
     clean_text = text.upper().strip()
     words = clean_text.split()
@@ -250,16 +268,7 @@ def generate_subtitles_stream(
             else:
                 slide = blank_path
             entries.append((slide, finish - begin))
-    concat_file = slides_dir / "captions.ffconcat"
-
-    def quote(path):
-        return str(path.resolve()).replace("'", "'\\''")
-
-    with concat_file.open("w") as stream:
-        stream.write("ffconcat version 1.0\n")
-        for path, duration in entries:
-            stream.write(f"file '{quote(path)}'\noption framerate 1000\nduration {duration:.6f}\n")
-        stream.write(f"file '{quote(entries[-1][0])}'\noption framerate 1000\n")
+    concat_file = write_concat(entries, slides_dir / "captions.ffconcat")
     print(f"[+] Captions: {len(cues)} highlight states aligned to spoken words.")
     return concat_file
 

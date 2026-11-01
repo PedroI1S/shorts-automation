@@ -1,10 +1,37 @@
 # Current handoff
 
-Snapshot: 2026-10-29. Read this first, then SETUP_WINDOWS.md and the current source.
+Snapshot: 2026-10-31. Read this first, then SETUP_WINDOWS.md and the current source.
 The complete chronological record is preserved in
 [docs/history/HANDOFF_2026-10-28.md](docs/history/HANDOFF_2026-10-28.md). Historical
 statements about missing Windows setup, model access or upload integration are
 superseded by this summary.
+
+## Series-only production with chat arcs — 2026-10-31
+
+The user requested chat-overlay Shorts for conversation stories (multiple voices),
+modeled on text-thread story videos, and series-only production for everything.
+They chose relationship drama/cheating/revenge for chats, 3/4-part arcs for chats
+too, and alternating arc formats (narrated horror, then chat drama, and so on).
+
+New: `story_format="series"` and `series_formats` in production config; chat arc
+drafting (prompts/story_chat_series.md); per-sender voice planning and joined
+multi-voice narration (tts_engine); the chat overlay renderer; a `format` column
+on story_series (migrated in place, existing arcs read as narrated); drama upload
+tags. Details are in docs/STORY_WORKFLOW.md and docs/PRODUCTION.md.
+
+Not yet activated on the Windows PC: secrets/production.json there still says
+`story_format="mixed"` until the user, or Hermes on the user's instruction, sets
+`"story_format": "series"`. Publication mode is unchanged. With the current Fish
+settings (one male voice_id, one female_voice_id), chat contacts are always the
+opposite gender to the protagonist; add `chat_extra_voice_ids` to
+secrets/fish.local.json for same-gender contacts.
+
+Validation: 261 offline tests (19 new) and Ruff checks on changed files passed on
+macOS with a temporary stand-in production config. An offline preview was rendered
+with macOS `say` voices standing in for Fish and a synthetic background:
+storage/reviews/chat_preview_20261031/ on the Mac. No live drafting, Fish/ElevenLabs
+generation, footage research or upload was run. The first real chat arc
+(Hermes drafting, Fish voices, creator footage) has not been reviewed yet.
 
 ## Gameplay detail fix — 2026-10-29
 

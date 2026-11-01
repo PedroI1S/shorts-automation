@@ -8,13 +8,17 @@ from uuid import uuid4
 
 from config import DEFAULT_VOICE, MAX_DURATION_SECONDS, NARRATION_TAIL_SECONDS, OUTPUT_DIR
 from shorts_automation.footage.gameplay_fetcher import get_background_clip, get_video_duration
+from shorts_automation.rendering.chat_overlay import generate_chat_stream
 from shorts_automation.rendering.subtitle_engine import generate_subtitles_stream
 from shorts_automation.rendering.video_compiler import compile_short
 from shorts_automation.state.source_lock import synchronized
 from shorts_automation.state.usage_store import render_job
 from shorts_automation.stories.draft_story import validate_story
 from shorts_automation.stories.tts_engine import (
+    chat_voice_identity,
+    estimate_chat_duration,
     estimate_duration,
+    generate_chat_speech,
     generate_speech,
     select_story_voice,
 )
@@ -60,12 +64,20 @@ def run_pipeline(
             raise ValueError("The supplied background is unreadable or has no duration.")
     title = story.get("title", "Untitled Short")
     script = story.get("script", "")
-    voice = select_story_voice(story, tts_provider, voice)
+    chat = story.get("format") == "chat"
+    if chat:
+        # Resolves one distinct voice per sender, or stops before any TTS call.
+        voice = chat_voice_identity(story, tts_provider)
+    else:
+        voice = select_story_voice(story, tts_provider, voice)
     print(f"📖 Title: {title}")
     print(f'📝 Script preview: "{script[:100]}..."')
 
     # Reject over-long scripts before reserving the story or spending TTS quota.
-    estimated = estimate_duration(script, tts_provider)
+    if chat:
+        estimated = estimate_chat_duration(story["chat"], tts_provider)
+    else:
+        estimated = estimate_duration(script, tts_provider)
     if estimated + NARRATION_TAIL_SECONDS > MAX_DURATION_SECONDS:
         raise NarrationTooLong(
             f"Script is {len(script.split())} words; estimated {estimated:.1f}s narration with "
@@ -84,9 +96,14 @@ def run_pipeline(
             )
         # 2. VOICE SYNTHESIS & TIMINGS
         print("\n[STEP 2/5] Generating voiceover & word timestamps...")
-        audio_path, duration, sentence_blocks = generate_speech(
-            script, voice=voice, provider=tts_provider
-        )
+        if chat:
+            audio_path, duration, sentence_blocks, chat_timeline = generate_chat_speech(
+                story, tts_provider
+            )
+        else:
+            audio_path, duration, sentence_blocks = generate_speech(
+                script, voice=voice, provider=tts_provider
+            )
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError("Narration duration must be positive and finite.")
         if duration + NARRATION_TAIL_SECONDS > MAX_DURATION_SECONDS:
@@ -112,9 +129,14 @@ def run_pipeline(
         # 4. SUBTITLE STREAM GENERATION
         print("\n[STEP 4/5] Building synchronized word-highlight captions...")
         caption_options = {"series": story["series"]} if "series" in story else {}
-        subtitles_concat = generate_subtitles_stream(
-            sentence_blocks, total_audio_duration=duration, **caption_options
-        )
+        if chat:
+            subtitles_concat = generate_chat_stream(
+                story, sentence_blocks, chat_timeline["messages"], duration, **caption_options
+            )
+        else:
+            subtitles_concat = generate_subtitles_stream(
+                sentence_blocks, total_audio_duration=duration, **caption_options
+            )
 
         # 5. FINAL VIDEO ASSEMBLY
         print("\n[STEP 5/5] Compiling final vertical video...")

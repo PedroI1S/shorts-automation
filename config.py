@@ -32,6 +32,14 @@ SPEECH_WORDS_PER_SECOND = {"fish": 2.59, "elevenlabs": 2.9, "edge": 2.5}
 # miscounts. There is no minimum length; complete stories must not be padded.
 STORY_MAX_WORDS = 146
 STORY_PROMPT_MAX_WORDS = 140
+# Chat-thread Shorts voice every message separately and add silent gaps between
+# them, so they get a smaller word budget. Gaps also give the typing indicator time.
+CHAT_MAX_WORDS = 115
+CHAT_PROMPT_MAX_WORDS = 105
+CHAT_MAX_MESSAGES = 18
+CHAT_MAX_MESSAGE_WORDS = 30
+CHAT_GAP_SECONDS = 0.25  # Between consecutive messages from the same sender
+CHAT_SWITCH_GAP_SECONDS = 0.5  # When the other person answers
 
 # Audio / TTS Settings
 DEFAULT_VOICE = "en-US-ChristopherNeural"  # Deep, engaging male narrator
@@ -50,6 +58,23 @@ _font_candidates = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 ]
 FONT_PATH = next((path for path in _font_candidates if path and os.path.isfile(path)), "")
+
+_chat_font_candidates = [
+    os.getenv("CHAT_FONT_PATH", ""),
+    "C:/Windows/Fonts/segoeui.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+]
+_chat_bold_candidates = [
+    os.getenv("CHAT_BOLD_FONT_PATH", ""),
+    "C:/Windows/Fonts/segoeuib.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+]
+CHAT_FONT_PATH = next((p for p in _chat_font_candidates if p and os.path.isfile(p)), "")
+CHAT_BOLD_FONT_PATH = next((p for p in _chat_bold_candidates if p and os.path.isfile(p)), "")
 
 SUBTITLE_FONT_SIZE = 72
 SUBTITLE_PRIMARY_COLOR = (255, 255, 255, 255)  # White

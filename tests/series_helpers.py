@@ -27,6 +27,33 @@ def arc(parts=3, gender="female", token="fixture"):
     }
 
 
+def chat_arc(parts=3, gender="female", token="fixture"):
+    # Hex identities can contain digit runs that the phone-number guard rejects.
+    token = token.translate(str.maketrans("0123456789", "ghijklmnop"))
+    return {
+        "title": "The Receipt In His Jacket",
+        "continuity": "I find a receipt for a ring I never got. Jordan lies; the finale exposes him using his own forwarded hotel booking.",
+        "format": "chat",
+        "protagonist_gender": gender,
+        "narrator_gender": gender,
+        "contacts": [{"name": "Jordan", "gender": "male" if gender == "female" else "female"}],
+        "parts": [
+            {
+                "title": "The Receipt In The Jacket",
+                "contact": "Jordan",
+                "messages": [
+                    {"from": "me", "text": f"Why is there a ring receipt {token} in your jacket?"},
+                    {"from": "Jordan", "text": f"It is for my sister, number {number}."},
+                    {"from": "me", "text": "Your sister told me she is not engaged."},
+                    {"from": "Jordan", "text": "Can we talk tonight instead?"},
+                ],
+                "ending": "finale" if number == parts else "cliffhanger",
+            }
+            for number in range(1, parts + 1)
+        ],
+    }
+
+
 class SeriesHarness:
     def __init__(self, root):
         self.root = Path(root)
@@ -48,9 +75,10 @@ class SeriesHarness:
         )
         return path
 
-    def series_drafter(self, topic, *, parts, identity, gender):
+    def series_drafter(self, topic, *, parts, identity, gender, story_format="narrated", provider=None):
         self.drafts.append((topic, parts, identity))
-        return save_series(arc(parts, gender=gender, token=identity), identity, self.root / "series", topic)
+        build = chat_arc if story_format == "chat" else arc
+        return save_series(build(parts, gender=gender, token=identity), identity, self.root / "series", topic)
 
     def renderer(self, story_file, **kwargs):
         story = validate_story(json.loads(Path(story_file).read_text()))

@@ -78,8 +78,16 @@ def load_config(path=CONFIG_PATH):
     config.setdefault("series_standalones_between", 3)
     config.setdefault("series_min_lead_hours", 4)
     config.setdefault("series_parts", [3, 4])
-    if config["story_format"] not in ("standalone", "mixed"):
-        raise ValueError("Choose standalone or mixed story format.")
+    config.setdefault("series_formats", ["narrated", "chat"])
+    if config["story_format"] not in ("standalone", "mixed", "series"):
+        raise ValueError("Choose standalone, mixed or series story format.")
+    if (
+        not isinstance(config["series_formats"], list)
+        or not config["series_formats"]
+        or any(f not in ("narrated", "chat") for f in config["series_formats"])
+        or len(set(config["series_formats"])) != len(config["series_formats"])
+    ):
+        raise ValueError("series_formats must contain narrated, chat, or both without duplicates.")
     if (
         not isinstance(config["series_parts"], list)
         or not config["series_parts"]
@@ -197,6 +205,60 @@ def fresh_topic(slot, existing):
     raise RuntimeError("Original premise pool exhausted; expand the settings/object/anomaly lists.")
 
 
+# Drama premises for chat arcs. Relationships stay gender-neutral: the drafter
+# assigns contact genders that the configured distinct voices can cover.
+RELATIONSHIPS = (
+    "my partner of three years",
+    "the person I am engaged to",
+    "my best friend since high school",
+    "my roommate",
+    "my older sibling",
+    "my manager",
+    "my partner's best friend",
+    "my business partner",
+    "my future in-law",
+    "my ex who still has a key",
+    "a stranger who texts the wrong number",
+    "my next-door neighbor",
+)
+DISCOVERIES = (
+    "a message clearly meant for someone else",
+    "a shared location that does not match their story",
+    "a receipt for an expensive gift I never received",
+    "a second phone hidden in a coat pocket",
+    "an anniversary dinner booked under someone else's name",
+    "a mutual friend who slips up over text",
+    "a voice note sent by accident",
+    "a group chat I was never meant to see",
+    "a hotel confirmation forwarded to the wrong inbox",
+    "a lie about working late that a coworker exposes",
+)
+PAYOFFS = (
+    "I already knew and calmly let them dig deeper",
+    "the person helping me has a secret of their own",
+    "I expose everything at the worst possible moment for them",
+    "the evidence turns out to point at someone unexpected",
+    "my quiet plan costs them exactly what they cared about most",
+    "the wrong-number stranger becomes the key witness",
+    "they try to flip the blame and it backfires",
+    "the other person they were seeing teams up with me",
+)
+
+
+def fresh_chat_topic(slot, existing):
+    combinations = list(itertools.product(RELATIONSHIPS, DISCOVERIES, PAYOFFS))
+    random.Random(hashlib.sha256(("chat:" + slot).encode()).digest()).shuffle(combinations)
+    for relationship, discovery, payoff in combinations:
+        premise = (
+            f"Texting with {relationship}, it starts with {discovery}. Direction for the payoff: "
+            f"{payoff}. Invent a fresh first-person protagonist, a concrete betrayal and a "
+            "satisfying, legal revenge."
+        )
+        if premise.casefold() not in existing:
+            return premise
+    raise RuntimeError("Drama premise pool exhausted; expand the relationship/discovery lists.")
+
+
 def initialize(queue):
     with queue.connect() as db:
         db.executescript("""
@@ -284,8 +346,94 @@ def holds_releases(queue, series, slots, now):
     return any(row["stage"] in series_queue.BLOCKING for row in rows)
 
 
+def next_series_format(queue, config):
+    """Alternate arc formats in configured order, continuing from the latest arc."""
+    if config.get("story_format") != "series":
+        return "narrated"
+    formats = config.get("series_formats", ["narrated", "chat"])
+    with queue.connect() as db:
+        last = db.execute(
+            "SELECT format FROM story_series ORDER BY created_at DESC, rowid DESC LIMIT 1"
+        ).fetchone()
+    if not last or last[0] not in formats:
+        return formats[0]
+    return formats[(formats.index(last[0]) + 1) % len(formats)]
+
+
+def link_arc(queue, config, now, rows, first):
+    """Bind the arc to consecutive untouched slots starting at `first`, if they exist."""
+    with queue.connect() as db:
+        count = db.execute("SELECT COUNT(*) FROM story_series").fetchone()[0]
+    lengths = config.get("series_parts", [3, 4])
+    preferred = lengths[count % len(lengths)]
+    slots = list(future_slots(config, now))
+    if first["publish_at"] not in slots:
+        return None
+    start = slots.index(first["publish_at"])
+    by_slot = {row["publish_at"]: row for row in rows}
+    for total in dict.fromkeys((preferred, *lengths)):
+        window = slots[start : start + total]
+        if len(window) != total:
+            continue
+        jobs = [by_slot.get(slot) for slot in window]
+        if any(
+            not job
+            or job["stage"] != "queued"
+            or job["story_path"]
+            or job["tts_provider"] != first["tts_provider"]
+            or series_queue.info(queue, job["id"])
+            for job in jobs
+        ):
+            continue
+        story_format, topic = next_series_format(queue, config), None
+        if story_format == "chat":
+            with queue.connect() as db:
+                existing = {
+                    r[0].casefold()
+                    for r in db.execute(
+                        "SELECT topic FROM queue_jobs UNION SELECT topic FROM story_series"
+                    )
+                }
+            topic = fresh_chat_topic(first["publish_at"], existing)
+        return series_queue.link(queue, [job["id"] for job in jobs], story_format, topic)
+    return None
+
+
+def assign_series_only(queue, config, now):
+    """Every automatic release belongs to an arc; formats alternate between arcs.
+
+    Already drafted standalone jobs keep their slots. Slots too close to prepare a
+    complete arc are skipped rather than filled with a standalone.
+    """
+    rows = owned_jobs(queue)
+    slots = {row["id"]: row["publish_at"] for row in rows}
+    for row in rows:
+        series = series_queue.info(queue, row["id"])
+        if series and holds_releases(queue, series, slots, now):
+            return None
+    lead = now + timedelta(hours=config.get("series_min_lead_hours", 4))
+    for row in rows:
+        if row["stage"] not in ("queued", "drafted") or not series_queue.can_process(
+            queue, row["id"]
+        ):
+            continue
+        existing = series_queue.info(queue, row["id"])
+        if existing:
+            return existing["id"]
+        if row["stage"] != "queued" or row["story_path"]:
+            continue
+        if datetime.fromisoformat(row["publish_at"].replace("Z", "+00:00")) < lead:
+            continue
+        identity = link_arc(queue, config, now, rows, row)
+        if identity:
+            return identity
+    return None
+
+
 def assign_series(queue, config, now):
     """Mix one coherent arc into untouched consecutive slots after standalone releases."""
+    if config.get("story_format") == "series":
+        return assign_series_only(queue, config, now)
     if config.get("story_format") != "mixed" or not config["publish_enabled"]:
         return None
     buffer = scheduled_buffer(queue, config, now)
@@ -334,31 +482,7 @@ def assign_series(queue, config, now):
             break
     if standalones < config.get("series_standalones_between", 3):
         return None
-    with queue.connect() as db:
-        count = db.execute("SELECT COUNT(*) FROM story_series").fetchone()[0]
-    lengths = config.get("series_parts", [3, 4])
-    preferred = lengths[count % len(lengths)]
-    slots = list(future_slots(config, now))
-    if first["publish_at"] not in slots:
-        return None
-    start = slots.index(first["publish_at"])
-    by_slot = {row["publish_at"]: row for row in rows}
-    for total in dict.fromkeys((preferred, *lengths)):
-        window = slots[start : start + total]
-        if len(window) != total:
-            continue
-        jobs = [by_slot.get(slot) for slot in window]
-        if any(
-            not job
-            or job["stage"] != "queued"
-            or job["story_path"]
-            or job["tts_provider"] != first["tts_provider"]
-            or series_queue.info(queue, job["id"])
-            for job in jobs
-        ):
-            continue
-        return series_queue.link(queue, [job["id"] for job in jobs])
-    return None
+    return link_arc(queue, config, now, rows, first)
 
 
 def current_footage_format(job):
@@ -382,6 +506,19 @@ def current_story_format(job, config):
         Path(job["output"]).with_suffix(".metadata.json").read_text(encoding="utf-8")
     )
     story = metadata.get("story", {})
+    if story.get("format") == "chat":
+        from shorts_automation.stories.draft_story import CHAT_REVISION, validate_story
+        from shorts_automation.stories.tts_engine import chat_voice_identity
+
+        audio = json.loads(
+            Path(metadata["narration"]).with_suffix(".json").read_text(encoding="utf-8")
+        )
+        try:
+            expected = chat_voice_identity(validate_story(story), metadata["tts_provider"])
+        except RuntimeError as error:
+            # A voice settings problem needs inspection, not automatic retirement.
+            raise ValueError(str(error)) from error
+        return story.get("story_revision") == CHAT_REVISION and audio.get("voice") == expected
     if story.get("story_revision") != "horror-v2" or story.get("protagonist_gender") not in (
         "female",
         "male",
@@ -669,6 +806,12 @@ def cycle(
     youtube = None
     upload_attempted = set()
 
+    def may_prepare(identity):
+        """Series-only production never drafts a new standalone story."""
+        if config.get("story_format") != "series" or series_queue.info(queue, identity):
+            return True
+        return queue.get(identity)["stage"] == "drafted"
+
     def advance_series(series):
         nonlocal youtube
         rows = series_queue.members(queue, series["id"])
@@ -919,7 +1062,9 @@ def cycle(
                     include=[
                         identity
                         for identity in include
-                        if identity not in processed and series_queue.can_process(queue, identity)
+                        if identity not in processed
+                        and series_queue.can_process(queue, identity)
+                        and may_prepare(identity)
                     ][:1],
                     series_drafter=series_drafter,
                 )

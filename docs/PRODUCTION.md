@@ -33,6 +33,11 @@ Settings live in ../secrets/production.json:
   finite audio, synchronized captions and the 58-second maximum still apply.
 - Each pass advances at most one automatic job. There are three failures total
   per job, with retries on later passes rather than a tight loop.
+- story_format=series (user decision, 2026-10-31) makes every new automatic
+  release part of a 3/4-part arc, alternating the `series_formats` list
+  (default narrated, chat) arc by arc. It never drafts a new standalone, starts
+  an arc even when the reserve is below its minimum, and skips slots too close to
+  prepare a complete arc. See docs/STORY_WORKFLOW.md for chat arcs.
 - story_format=mixed adds serial arcs alongside standalones. With
   series_standalones_between=3, three standalone Shorts separate arcs;
   series_parts=[3,4] prefers alternating supported lengths. A new arc needs
