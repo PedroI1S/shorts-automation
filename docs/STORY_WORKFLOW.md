@@ -90,6 +90,25 @@ Draft a chat arc manually (spends model allowance only):
 An offline preview, voiced with local stand-in voices, is in
 storage/reviews/chat_preview_20261031/.
 
+## Narrated horror upgrade (2026-10-31)
+
+prompts/story_horror_series.md now carries the full craft rules of the
+standalone brief plus series-specific ones: Part 1 opens on its most disturbing
+concrete event; later parts answer the cliffhanger within two sentences; every
+nonfinal part ends on a specific danger, discovery or forced decision; the
+threat follows one learnable rule that is tested in the middle and used in the
+finale; at most one other named character; a planted clue explains the ending.
+The editorial rewrite checks each of these.
+
+Horror premises from production.py now include one threat rule (for example
+"it gets closer each time the narrator ignores it"). The drafter also receives
+the titles and bibles of the six most recent saved arcs of the same format and
+is told not to repeat them. New narrated drafts are rejected and repaired when a
+part opens with a warm-up cliché ("It was a normal night", "My name is",
+"To this day"...) or uses a stock ending ("everything went black", "it was all a
+dream"). Saved arcs are never re-judged by these lists. The `horror-v2` story
+revision is unchanged, so already prepared videos stay current.
+
 ## Stories across 3–4 Shorts
 
 Mixed mode (`story_format="mixed"`, superseded by series-only on 2026-10-31)

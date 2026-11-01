@@ -195,11 +195,32 @@ ANOMALIES = (
 )
 
 
+# One learnable rule per threat gives arcs a mechanism to test and pay off,
+# and makes premises differ in how the horror works, not only in props.
+THREAT_RULES = (
+    "it can only move while nobody is looking at it",
+    "it copies the voice of whoever the narrator trusts most",
+    "it can only enter where it has been invited",
+    "it gets closer each time the narrator ignores it",
+    "it takes one small thing every time it is seen",
+    "it knows anything the narrator writes down or says aloud",
+    "it can only reach people who are alone",
+    "it repeats the same night with one detail changed",
+    "it is hiding among people the narrator already knows",
+    "it cannot cross a line the narrator has to keep unbroken",
+)
+
+
 def fresh_topic(slot, existing):
     combinations = list(itertools.product(SETTINGS, OBJECTS, ANOMALIES))
     random.Random(hashlib.sha256(slot.encode()).digest()).shuffle(combinations)
+    rules = random.Random(hashlib.sha256(("rule:" + slot).encode()).digest())
     for setting, obj, anomaly in combinations:
-        premise = f"In {setting}, {obj} {anomaly}. Invent a fresh first-person narrator, one clear threat and a frightening payoff consistent with the setup."
+        premise = (
+            f"In {setting}, {obj} {anomaly}. The threat follows one rule: "
+            f"{rules.choice(THREAT_RULES)}. Invent a fresh first-person narrator, one clear "
+            "threat and a frightening payoff consistent with the setup and that rule."
+        )
         if premise.casefold() not in existing:
             return premise
     raise RuntimeError("Original premise pool exhausted; expand the settings/object/anomaly lists.")

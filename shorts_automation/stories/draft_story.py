@@ -71,6 +71,45 @@ def _chat_text(value, what):
     return text
 
 
+# Warm-up openings and stock endings rejected in NEW narrated drafts only, so the
+# model repairs them; already saved stories are never re-judged by these lists.
+CLICHE_OPENINGS = (
+    "i never believed",
+    "i never used to believe",
+    "i used to think",
+    "it was a normal",
+    "it was just a normal",
+    "it was a typical",
+    "it started like any other",
+    "it started out as",
+    "my name is",
+    "let me tell you",
+    "this happened",
+    "to this day",
+    "i still don't know",
+    "i still do not know",
+)
+CLICHE_PHRASES = (
+    "everything went black",
+    "it was all a dream",
+    "it was just a dream",
+    "i was already dead",
+    "and then i woke up",
+)
+
+
+def opening_problem(script):
+    """Why a new narrated script needs repair, or None."""
+    text = " ".join(script.split()).casefold().replace("’", "'")
+    for opening in CLICHE_OPENINGS:
+        if text.startswith(opening):
+            return f'Open on the disturbing event itself, not "{opening}".'
+    for phrase in CLICHE_PHRASES:
+        if phrase in text:
+            return f'Remove the stock ending "{phrase}".'
+    return None
+
+
 def chat_gap(previous, current):
     """Silence before a message: longer when the other person starts typing."""
     return CHAT_SWITCH_GAP_SECONDS if previous["from"] != current["from"] else CHAT_GAP_SECONDS

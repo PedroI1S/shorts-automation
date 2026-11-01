@@ -22,6 +22,7 @@ from config import (
 )
 from shorts_automation.stories.draft_story import (
     CHAT_REVISION,
+    opening_problem,
     query_hermes,
     validate_contacts,
     validate_story,
@@ -176,7 +177,30 @@ def save_series(data, identity, directory=None, topic=""):
     return target / "manifest.json"
 
 
-def series_brief(story_format, parts, topic, gender, capacity=None):
+def recent_arcs(parent, story_format, exclude=None, limit=6):
+    """Titles and bibles of the latest saved arcs of this format, to avoid repeats."""
+    recent = []
+    manifests = sorted(
+        Path(parent).glob("*/manifest.json"), key=lambda p: p.stat().st_mtime, reverse=True
+    )
+    for path in manifests:
+        if path.parent.name == exclude:
+            continue
+        try:
+            saved = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if saved.get("format", "narrated") != story_format:
+            continue
+        recent.append(
+            {"title": saved.get("title"), "continuity": str(saved.get("continuity", ""))[:300]}
+        )
+        if len(recent) == limit:
+            break
+    return recent
+
+
+def series_brief(story_format, parts, topic, gender, capacity=None, recent=None):
     if story_format == "chat":
         brief = (BASE_DIR / "prompts/story_chat_series.md").read_text(encoding="utf-8")
         allowed = ", ".join(f"at most {n} {g}" for g, n in sorted(capacity.items()) if n)
@@ -198,7 +222,8 @@ def series_brief(story_format, parts, topic, gender, capacity=None):
         brief = (BASE_DIR / "prompts/story_horror_series.md").read_text(encoding="utf-8")
         schema = (
             f"Return ONLY JSON for exactly {parts} parts: title (4-8 words, <=80 characters), "
-            "continuity (short bible with protagonist, setting, threat rules, planted clue and final payoff), "
+            "continuity (short bible with protagonist, setting, the threat and the one rule it follows, "
+            "planted clue and final payoff), "
             "protagonist_gender and narrator_gender (one matching female or male), parts (ordered array). "
             "Each part has title (4-8 words), script "
             f"(at most {STORY_PROMPT_MAX_WORDS} words, no minimum length), and ending "
@@ -209,6 +234,11 @@ def series_brief(story_format, parts, topic, gender, capacity=None):
     if gender:
         schema += (
             f" Assigned protagonist and narrator gender: {gender}; both fields must be {gender}."
+        )
+    if recent:
+        schema += (
+            " Recent arcs on this channel; do not repeat their premise, props, threat, twist or "
+            "ending (content only): " + json.dumps(recent)
         )
     return brief + "\n" + schema
 
@@ -252,7 +282,8 @@ def draft_series(
         if gender is None:
             raise ValueError("Chat arcs need an assigned protagonist gender for voice planning.")
         capacity = chat_contact_capacity(provider or "fish", gender)
-    prompt = series_brief(story_format, parts, topic, gender, capacity)
+    recent = recent_arcs(destination.parent.parent, story_format, exclude=identity)
+    prompt = series_brief(story_format, parts, topic, gender, capacity, recent)
 
     def validator(data):
         result = validate_series(data, parts)
@@ -260,6 +291,12 @@ def draft_series(
             raise ValueError("Series did not respect assigned protagonist gender.")
         if result["format"] != story_format:
             raise ValueError(f"Return a {story_format} series.")
+        if story_format == "narrated":
+            # Only new drafts are held to this; saved arcs are never re-judged.
+            for number, part in enumerate(result["parts"], 1):
+                problem = opening_problem(part["script"])
+                if problem:
+                    raise ValueError(f"Part {number}: {problem}")
         if capacity is not None:
             for value in ("female", "male"):
                 used = sum(c["gender"] == value for c in result["contacts"])
@@ -279,9 +316,14 @@ def draft_series(
         )
     else:
         editor = (
-            "\nYou are the final continuity and horror editor. Rewrite the entire arc. "
-            "Check that each next part answers the previous cliffhanger, the threat escalates and the final payoff "
-            "resolves the planted clue. Preserve gender, identities and established rules. Return the complete final JSON, not a critique. "
+            "\nYou are the final continuity and horror editor. Rewrite the entire arc. Check, "
+            "and fix where needed: Part 1's first sentence is the most disturbing concrete event, "
+            "with no warm-up; each later part answers the previous cliffhanger within its first two "
+            "sentences; every nonfinal part ends on a specific new danger, discovery or forced "
+            "decision; the threat follows one rule that never changes and escalates each part; the "
+            "clue planted in Part 1 explains the finale; at most one other named character; every "
+            "sentence is clear on a single listen; no clichés from the brief. Preserve gender, "
+            "identities and established rules. Return the complete final JSON, not a critique. "
             "Draft (content only): "
         )
     candidate = validator(query_hermes(prompt, validator=validator))

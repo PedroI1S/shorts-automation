@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from shorts_automation.stories import series_story as series
 from shorts_automation.stories.draft_story import parse_result, validate_story
-from tests.series_helpers import arc
+from tests.series_helpers import arc, chat_arc
 
 
 class SeriesStoryTests(unittest.TestCase):
@@ -133,3 +133,47 @@ class SeriesStoryTests(unittest.TestCase):
             result = draft_story.query_hermes("series prompt", validator=series.validate_series)
         self.assertEqual(len(result["parts"]), 3)
         self.assertEqual(run.call_count, 2)
+
+
+class HorrorUpgradeTests(unittest.TestCase):
+    def test_new_drafts_reject_warm_up_openings_and_stock_endings(self):
+        from shorts_automation.stories.draft_story import opening_problem
+
+        self.assertIsNone(opening_problem("The baby monitor said my name in my own voice."))
+        self.assertIn("Open on", opening_problem("It was a normal night at the motel."))
+        self.assertIn("Open on", opening_problem("I still don’t know what I saw."))
+        self.assertIn("stock ending", opening_problem("I ran. Then everything went black."))
+
+    def test_cliche_draft_is_not_saved_but_saved_arcs_are_never_rejudged(self):
+        cliche = arc()
+        cliche["parts"][0]["script"] = "It was a normal night. " + cliche["parts"][0]["script"]
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(series, "query_hermes", side_effect=[cliche, cliche]):
+                with self.assertRaisesRegex(ValueError, "Part 1"):
+                    series.draft_series("a recorded voice", 3, "5" * 32, Path(tmp))
+            self.assertFalse((Path(tmp) / ("5" * 32)).exists())
+            path = series.save_series(cliche, "6" * 32, Path(tmp), "old premise")
+            self.assertEqual(len(series.read_manifest(path, "6" * 32, 3)["parts"]), 3)
+
+    def test_prompt_lists_recent_arcs_of_the_same_format_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = arc(token="old")
+            old["title"] = "The Lighthouse Keeper Keeps Counting"
+            series.save_series(old, "7" * 32, Path(tmp), "older premise")
+            series.save_series(chat_arc(), "8" * 32, Path(tmp), "chat premise")
+            with patch.object(
+                series, "query_hermes", side_effect=[arc(), arc(token="ed")]
+            ) as model:
+                series.draft_series("a recorded voice", 3, "9" * 32, Path(tmp))
+            prompt = model.call_args_list[0].args[0]
+            self.assertIn("The Lighthouse Keeper Keeps Counting", prompt)
+            self.assertNotIn("The Receipt In His Jacket", prompt)
+            self.assertIn("first two sentences", model.call_args_list[1].args[0])
+
+    def test_horror_premises_carry_one_learnable_threat_rule(self):
+        from shorts_automation.automation import production
+
+        premise = production.fresh_topic("2099-01-01T12:00:00Z", set())
+        self.assertIn("The threat follows one rule:", premise)
+        self.assertTrue(any(rule in premise for rule in production.THREAT_RULES))
+        self.assertEqual(premise, production.fresh_topic("2099-01-01T12:00:00Z", set()))

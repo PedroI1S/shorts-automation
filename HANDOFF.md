@@ -6,6 +6,14 @@ The complete chronological record is preserved in
 statements about missing Windows setup, model access or upload integration are
 superseded by this summary.
 
+## Narrated horror writing upgrade — 2026-10-31
+
+At the user's request the narrated horror series brief, editorial pass and
+premises were upgraded: stronger openings and cliffhangers, one learnable
+threat rule per arc, recent-arc avoidance and a cliché check on new drafts.
+See docs/STORY_WORKFLOW.md. 265 offline tests pass; no live drafting was run,
+so the first upgraded arc has not been reviewed yet.
+
 ## Series-only production with chat arcs — 2026-10-31
 
 The user requested chat-overlay Shorts for conversation stories (multiple voices),
